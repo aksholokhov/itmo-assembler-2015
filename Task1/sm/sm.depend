@@ -1,0 +1,9 @@
+# depslib dependency file v1.0
+1425490010 source:d:\sm\main.cpp
+	<iostream>
+	<stdarg.h>
+	<stdlib.h>
+	"main.h"
+
+1425488885 d:\sm\main.h
+

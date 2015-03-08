@@ -7,7 +7,7 @@ using namespace std;
 
 int main() {
     char* out = new char[20];
-    hw_sprintf(out, "Hello world %d\n", 239);
+    /*hw_sprintf(out, "Hello world %d\n", 239);
     cout<<out;
     hw_sprintf(out, "%0+5u\n", 51);
     cout<<out;
@@ -20,6 +20,8 @@ int main() {
     hw_sprintf(out, "%wtf\n", 1, 2, 3, 4);
     cout<<out;
     hw_sprintf(out, "50%%\n");
+    */
+    hw_sprintf(out, "aaa", 239);
     cout<<out;
     return 0;
 }

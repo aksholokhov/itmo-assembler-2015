@@ -9,9 +9,10 @@ FILL_ZERO_FLAG      equ  1 << 3         ;0  short name - FZ_flag
 ONLY_MINUS_FLAG     equ  1 << 4         ;   short name - OM_flag
 LONG_FLAG           equ  1 << 5         ;ll short name - L_flag
 SIGNED_NUM_FLAG     equ  1 << 6         ;id short name - SN_flag
+REVERTED_SIGN_FLAG  equ  1 << 7         ;   short name - RS_flag
 
 
-; BODY OF SPRINTF FUNCTION
+; SPRINTF FUNCTION
 ; edi - output stream address
 ; esi - format stream address
 ; ebp - current number address
@@ -56,10 +57,10 @@ hw_sprintf:         push ebp
                     je  .try_set_L_flag
                     cmp bl, '0'
                     jg  .try_set_width
-                    jmp .print_control_seq
+                    jmp .print_as_is
 
-.next_char          cmp bl, 0               ;if 0-symbol
-                    je  .finish             ;jump to the number printing
+.next_char          cmp bl, 0
+                    je  .after_all
                     inc esi
                     jmp .char_matching
 
@@ -121,7 +122,7 @@ hw_sprintf:         push ebp
 ;Print functions
 
 ;prints numbers or sequences
-.print_as_is        mov al, [ecx]
+print_as_is         mov al, [ecx]
                     mov [edi], al
                     inc edi
                     inc ecx
@@ -133,16 +134,68 @@ hw_sprintf:         push ebp
                     jmp .next_char
 
 
-.print_char         xor eax, eax
+print_char          xor eax, eax
                     mov [edi], bl
                     inc edi
                     jmp .next_char
 
-.print_control_seq  ret             ;blob
 
-.print_signed       ret             ;blob
+print_signed        or bh, SIGNED_NUM_FLAG
+                    jmp .print_signed
 
-.print_unsigned     ret             ;blob
+print_unsigned      test bh, LONG_FLAG
+                    jnz .print_int
+                    jmp .print_long
+
+;Prints integer, stored in
+
+print_int           push edx                ;Width (stored in [esp+1]
+                    push bh                 ;Flags (stored in [esp]
+                    mov ecx, [ebp]
+                    test byte [esp], SIGNED_NUM_FLAG
+                    jz  .sgate1             ;Length calculating
+                    cmp ecx, 0
+                    jl  .revert_sign
+;Length calculating, stores length in eax
+.stage1             xor eax, eax
+.loop_stage1        div ecx, 10
+                    inc eax
+                    cmp ecx, 0
+                    jg  .loop_stage1
+                    mov ecx, [ebp]
+                    push .stage2
+                    jmp print_left_part
+;module print
+.stage2             lea edi, [edi+eax]
+                    mov ecx, [ebp]
+.loop_stage2        dec edi
+                    mov edx, ecx
+                    div edx, 10
+                    mul edx, 10
+                    sub edx, ecx
+                    neg edx
+                    mov [edi], edx
+                    cmp ecx, 0
+                    jg .loop_stage2
+                    lea edi, [edi+eax]
+                    push .stage3
+                    test byte[esp+4], LEFT_ALIGN_FLAG
+                    jnz print_right_part
+                    add esp, 4
+.stage3             add ebp, 4
+                    jmp cleaner
+;ecx - int, needs to be reverted
+
+.revert_sign        or byte [esp], REVERTED_SIGN_FLAG
+                    neg ecx
+                    mov [ebp], ecx
+                    ret
+
+print_long          ret
+
+print_left_part
+
+print_right_part
 
 ; other functions
-.finish             jmp .print_as_is
+

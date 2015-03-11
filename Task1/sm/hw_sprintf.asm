@@ -166,7 +166,8 @@ print_int           push edx                ;Width (stored in [esp+1]
                     push .stage2
                     jmp print_left_part
 ;module print
-.stage2             lea edi, [edi+eax]
+.stage2             add esp, 4
+                    lea edi, [edi+eax]
                     mov ecx, [ebp]
 .loop_stage2        dec edi
                     mov edx, ecx
@@ -193,9 +194,76 @@ print_int           push edx                ;Width (stored in [esp+1]
 
 print_long          ret
 
-print_left_part
+;prints sign, spaces or zeros before module.
+print_left_part     add esp, 4
+                    sub [esp+1], ebx
+                    test byte [esp], REVERTED_SIGN_FLAG
+                    jnz .rezerve_sign_place
+                    test byte [esp], SIGN_FULL_FLAG
+                    jnz .reserve_sign_place
+                    test byte [esp], ONLY_MINUS_FLAG
+                    jnz .reserve_sign_place
+.after_reservation  test byte [esp], LEFT_ALIGN_FLAG
+                    jz .print_left_spaces
+                    test byte [esp], FILL_ZERO_FLAG
+                    jz .print_left_spaces
+.print_sign         test byte [esp], REVERTED_SIGN_FLAG
+                    jnz .print_minus
+                    test byte [esp], SIGN_FULL_FLAG
+                    jnz .print_plus
+                    test byte [esp], ONLY_MINUS_FLAG
+                    jnz .print_space
+.try_print_zeroes   test byte [esp], LEFT_ALIGN_FLAG
+                    jz  .print_zeroes
+                    sub esp, 4
+.to_ret             ret
 
-print_right_part
+
+;Helping functions for left part printing
+.reserve_sign_place dec, dword[esp+1]
+                    jmp .after_reservation
+
+.print_left_spaces  mov edx, [esp+1]
+.print_ls_loop      cmp edx, 0
+                    jle .print_ls_after
+                    mov byte [edi], ' '
+                    inc edi
+                    dec edx
+                    jmp .print_ls_loop
+.print_ls_after     mov dword [esp+1], 0
+                    jmp .print_sign
+
+.print_plus         mov [edi], '+'
+                    inc edi
+                    jmp .print_module
+
+.print_minus        mov [edi], '-'
+                    inc edi
+                    jmp .print_module
+
+.print_space        mov [edi], ' '
+                    inc edi
+                    jmp .print_module
+
+.print_zeroes       mov edx, [esp+1]
+.print_zeroes_loop  cmp edx, 0
+                    jle .print_z_after
+                    mov byte [edi], '0'
+                    inc edi
+                    dec edx
+                    jmp .print_z_loop
+.print_z_after      mov dword [esp+1], 0
+                    jmp .to_ret
+
+;Prints right part
+print_right_part    mov edx, [esp+1]
+.right_part_loop    cmp edx, 0
+                    jle .right_part_loop
+                    mov byte [edi], ' '
+                    inc edi
+                    dec edx
+                    jmp .stage3
+
 
 ; other functions
 

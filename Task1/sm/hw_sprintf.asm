@@ -18,7 +18,7 @@ REVERTED_SIGN_FLAG  equ  1 << 7         ;   short name - RS_flag
 ; ebp - current number address
 ; bh - flags
 ; bl - current character
-; edx - width (0 as default)
+; edx - width
 ; ecx - start of the control sequence
 
 hw_sprintf:         push ebp
@@ -32,7 +32,7 @@ hw_sprintf:         push ebp
 
                     mov edi, [esp + 20]     ; edi = out
                     mov esi, [esp + 24]     ; esi = format
-                    lea ebp, [esp + 28]     ; ebp =
+                    lea ebp, [esp + 28]     ; ebp = nums
 
 .char_matching      mov bl, byte [esi]      ; write the next format char to bl
                     cmp bl, '%'             ;
@@ -102,27 +102,32 @@ hw_sprintf:         push ebp
                     jmp .read_int
 
 ;read functions
-;reads the int from input buffer and stores it to eax
+;reads the int from input buffer and stores it to edx
 ;input buffer address - esi
-;output int - eax
+;output int - edx
 
-.read_int           xor edx, edx
-.loop_read_int      mul edx, 10
+.read_int           push ebx
+                    xor eax, eax
+.loop_read_int      mov ebx, 10
+                    mul ebx
+                    xor ebx, ebx
                     mov bl, byte [esi]
-                    sub bl, '0'
-                    add edx, bl
+                    sub ebx, '0'
+                    add eax, ebx
                     inc esi
                     cmp byte [esi], '9'
-                    jg .char_matching
+                    jg .after_read_int
                     cmp byte [esi], '1'
                     jge .loop_read_int
+.after_read_int     mov edx, eax
+                    pop ebx
                     jmp .char_matching
 
 
 ;Print functions
 
 ;prints numbers or sequences
-print_as_is         mov al, [ecx]
+.print_as_is        mov al, [ecx]
                     mov [edi], al
                     inc edi
                     inc ecx
@@ -134,71 +139,79 @@ print_as_is         mov al, [ecx]
                     jmp .next_char
 
 
-print_char          xor eax, eax
+.print_char         xor eax, eax
                     mov [edi], bl
                     inc edi
                     jmp .next_char
 
 
-print_signed        or bh, SIGNED_NUM_FLAG
+.print_signed        or bh, SIGNED_NUM_FLAG
                     jmp .print_signed
 
-print_unsigned      test bh, LONG_FLAG
+.print_unsigned      test bh, LONG_FLAG
                     jnz .print_int
                     jmp .print_long
 
-;Prints integer, stored in
-
-print_int           push edx                ;Width (stored in [esp+1]
-                    push bh                 ;Flags (stored in [esp]
+.print_int          push edx                ;Width (stored in [esp+4]
+                    push ebx                 ;Flags (stored in [esp]
                     mov ecx, [ebp]
                     test byte [esp], SIGNED_NUM_FLAG
-                    jz  .sgate1             ;Length calculating
+                    jz  .stage1             ;Length calculating
                     cmp ecx, 0
                     jl  .revert_sign
-;Length calculating, stores length in eax
-.stage1             xor eax, eax
-.loop_stage1        div ecx, 10
-                    inc eax
-                    cmp ecx, 0
+
+;Calculates length of the number in [ebp] and stores result in ecx
+.stage1             mov eax, [ebp]
+                    xor ecx, ecx
+                    mov edx, 10
+.loop_stage1        div edx
+                    inc ecx
+                    cmp eax, 0
                     jg  .loop_stage1
-                    mov ecx, [ebp]
                     push .stage2
                     jmp print_left_part
 ;module print
 .stage2             add esp, 4
-                    lea edi, [edi+eax]
-                    mov ecx, [ebp]
+                    lea edi, [edi+ecx]
+                    mov edx, [ebp]
+                    mov eax, edx
+                    mov ebx, 10
 .loop_stage2        dec edi
-                    mov edx, ecx
-                    div edx, 10
-                    mul edx, 10
-                    sub edx, ecx
-                    neg edx
-                    mov [edi], edx
-                    cmp ecx, 0
+                    mov dword [edi], 0
+                    mov byte [edi], '0'
+                    div ebx
+                    mul ebx
+                    sub edx, eax
+                    add [edi], edx
+                    div ebx
+                    mov edx, eax
+                    cmp edx, 0
                     jg .loop_stage2
-                    lea edi, [edi+eax]
+                    lea edi, [edi+ecx]
                     push .stage3
                     test byte[esp+4], LEFT_ALIGN_FLAG
                     jnz print_right_part
                     add esp, 4
 .stage3             add ebp, 4
-                    jmp cleaner
-;ecx - int, needs to be reverted
+                    pop ebx
+                    pop edx
+                    xor ebx, ebx
+                    xor edx, edx
+                    jmp hw_sprintf.next_char
 
+;ecx - int, needs to be reverted
 .revert_sign        or byte [esp], REVERTED_SIGN_FLAG
                     neg ecx
                     mov [ebp], ecx
                     ret
 
-print_long          ret
+.print_long          ret
 
 ;prints sign, spaces or zeros before module.
 print_left_part     add esp, 4
-                    sub [esp+1], ebx
+                    sub [esp+4], ecx
                     test byte [esp], REVERTED_SIGN_FLAG
-                    jnz .rezerve_sign_place
+                    jnz .reserve_sign_place
                     test byte [esp], SIGN_FULL_FLAG
                     jnz .reserve_sign_place
                     test byte [esp], ONLY_MINUS_FLAG
@@ -220,50 +233,52 @@ print_left_part     add esp, 4
 
 
 ;Helping functions for left part printing
-.reserve_sign_place dec, dword[esp+1]
+
+.reserve_sign_place dec dword[esp+4]
                     jmp .after_reservation
 
-.print_left_spaces  mov edx, [esp+1]
+; Prints spaces in amount of [esp+4]
+.print_left_spaces  mov edx, [esp+4]
 .print_ls_loop      cmp edx, 0
                     jle .print_ls_after
                     mov byte [edi], ' '
                     inc edi
                     dec edx
                     jmp .print_ls_loop
-.print_ls_after     mov dword [esp+1], 0
+.print_ls_after     mov dword [esp+4], 0
                     jmp .print_sign
 
-.print_plus         mov [edi], '+'
+.print_plus         mov byte[edi], '+'
                     inc edi
-                    jmp .print_module
+                    jmp .try_print_zeroes
 
-.print_minus        mov [edi], '-'
+.print_minus        mov byte[edi], '-'
                     inc edi
-                    jmp .print_module
+                    jmp .try_print_zeroes
 
-.print_space        mov [edi], ' '
+.print_space        mov byte[edi], ' '
                     inc edi
-                    jmp .print_module
+                    jmp .try_print_zeroes
 
-.print_zeroes       mov edx, [esp+1]
+;Prints zeroes in amount of [esp+4]
+.print_zeroes       mov edx, [esp+4]
 .print_zeroes_loop  cmp edx, 0
                     jle .print_z_after
                     mov byte [edi], '0'
                     inc edi
                     dec edx
-                    jmp .print_z_loop
-.print_z_after      mov dword [esp+1], 0
+                    jmp .print_zeroes_loop
+.print_z_after      mov dword [esp+4], 0
                     jmp .to_ret
 
 ;Prints right part
-print_right_part    mov edx, [esp+1]
+print_right_part    mov edx, [esp+4]
 .right_part_loop    cmp edx, 0
                     jle .right_part_loop
                     mov byte [edi], ' '
                     inc edi
                     dec edx
-                    jmp .stage3
+                    jmp hw_sprintf.stage3
 
 
 ; other functions
-

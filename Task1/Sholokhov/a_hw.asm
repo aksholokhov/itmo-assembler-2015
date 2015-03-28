@@ -7,7 +7,7 @@ section .text
 CONTROL_FLAG_STATE  equ     1 << 8          ; control or non-control char?
 FLAG_PLUS_STATE     equ     1 << 9          ; always show sign?
 FLAG_SPACE_STATE    equ     1 << 10         ; space instead of '+'?
-FLAG_MINUS_STATE    equ     1 << 11         ; show number right-padded?
+FLAG_MINUS_STATE    equ     1 << 11         ; show number right-padded? 
 FLAG_ZERO_STATE     equ     1 << 12         ; show number zero-padded?
 SIZE_LONG_STATE     equ     1 << 13         ; is number 64-bit?
 UNSIGNED_STATE      equ     1 << 14         ; is number unsigned?
@@ -42,7 +42,7 @@ hw_atoi:            xor ebx, ebx
 
 ; outs 32-bit integer (EBX) from hw_sprintf's args
 ; to out buffer (EDI).
-;
+; 
 ; takes:
 ;   EAX - state (stored in ESP + 4)
 ;   EBX - integer width (stored in ESP)
@@ -107,7 +107,7 @@ out32:              push eax                ; save STATE and WIDTH vars
 
 ; outs 64-bit integer (EBX) from hw_sprintf's args
 ; to out buffer (EDI).
-;
+; 
 ; takes:
 ;   EAX - state (stored in ESP + 4)
 ;   EBX - integer width (stored in ESP)
@@ -134,7 +134,7 @@ out64:              push eax                ; looks similar to out32,
                     mov eax, edx
                     xor edx, edx
                     div ecx                 ; divide higher part of arg
-                    xchg eax, [esp]         ; divide lower part, reusing
+                    xchg eax, [esp]         ; divide lower part, reusing 
                     div ecx                 ; remainder of previous division
                     pop edx                 ; as usual, length is stored in EBX
                     inc ebx
@@ -199,7 +199,7 @@ out64:              push eax                ; looks similar to out32,
 
 out_left_part:      sub [esp + 4], ebx
                     mov eax, [esp + 8]
-                    push .after_dec         ; reserve space for sign, if needed
+                    push .after_dec         ; reserve space for sign, if needed      
                     test eax, INTERN_SIGN_STATE
                     jnz dec_width
                     test eax, FLAG_PLUS_STATE | FLAG_SPACE_STATE
@@ -258,7 +258,7 @@ out_minus:          mov byte [edi], '-'
                     inc edi
                     ret
 
-out_plus:           mov byte [edi], '+'
+out_plus:          mov byte [edi], '+'
                     inc edi
                     ret
 

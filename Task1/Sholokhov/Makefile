@@ -8,6 +8,7 @@ clean:
 	rm -f libhw.o
 	rm -f tester.o
 	rm -f tester
+	rm -f core
 
 tester: libhw.a tester.o
 	g++ -o tester $(CXX_FLAGS) tester.o -lhw
@@ -19,4 +20,4 @@ libhw.a: libhw.o
 	ar rcs libhw.a libhw.o
 
 libhw.o: hw_sprintf.asm
-	yasm -o libhw.o $(ASM_FLAGS) hw_sprintf.asm
+	yasm -g dwarf2 -o libhw.o $(ASM_FLAGS) hw_sprintf.asm

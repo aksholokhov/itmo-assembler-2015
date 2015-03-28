@@ -1,5 +1,5 @@
 ASM_FLAGS = -f elf32
-CXX_FLAGS = -m32 -L. -I../../include
+CXX_FLAGS = -m32 -L. -I include
 
 all: tester
 

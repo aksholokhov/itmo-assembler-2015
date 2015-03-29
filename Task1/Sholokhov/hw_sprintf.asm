@@ -110,6 +110,7 @@ hw_sprintf:         push ebp
                     test bh, LONG_FLAG
                     jnz .print_as_is
                     or  bh, LONG_FLAG
+	            inc esi
                     jmp .next_char
 
 .try_set_width      cmp bl, '9'
@@ -134,7 +135,7 @@ hw_sprintf:         push ebp
                     inc esi
                     cmp byte [esi], '9'
                     jg .after_read_int
-                    cmp byte [esi], '1'
+                    cmp byte [esi], '0'
                     jge .loop_read_int
 .after_read_int     mov edx, eax
                     pop ebx
@@ -166,17 +167,19 @@ hw_sprintf:         push ebp
 
 
 ;prints long long, stored in
-print_long:         push ebx                ; looks similar to out32,
-                    push edx                ; but .calculate_len and
+print_long:         push edx                ; looks similar to out32,
+                    push ebx                ; but .calculate_len and
                     xor ebx, ebx            ; .out_number mechanics differ slightly
                     mov eax, [ebp]          ; load lower and higher parts
                     mov edx, [ebp + 4]      ; of stack arg to (EDX:EAX)
                     mov ecx, 10
-                    test byte [esp + 4], SIGNED_NUM_FLAG
-                    jz .stage1            ; if out is signed
+	            mov ebx, dword[esp+4]
+                    test bh, SIGNED_NUM_FLAG
+                    jz .stage1	                             	; if out is signed
                     cmp edx, 0           ; and arg is negative,
                     jl .revert_sign     ; negate arg and treat it as uint
-.stage1:            push eax
+.stage1             xor ebx, ebx
+.stage1_loop:       push eax
                     mov eax, edx
                     xor edx, edx
                     div ecx                 ; divide higher part of arg
@@ -185,10 +188,11 @@ print_long:         push ebx                ; looks similar to out32,
                     pop edx                 ; as usual, length is stored in EBX
                     inc ebx
                     test eax, eax
-                    jnz .stage1
+                    jnz .stage1_loop
                     test edx, edx           ; continue while (EDX:EAX) != 0
-                    jnz .stage1
+                    jnz .stage1_loop
                     push .stage2
+	            mov ecx, ebx
                     jmp print_left_part       ; output left spaces, zeros and sign
 .stage2:            lea edi, [edi + ebx]
                     mov ecx, 10
@@ -225,14 +229,15 @@ print_long:         push ebx                ; looks similar to out32,
                     jnz .loop_stage2
 .stage3:            lea edi, [edi + ebx]
                     push .after_all
-                    test byte [esp + 8], LEFT_ALIGN_FLAG
+                    mov eax, dword [esp + 8]
+	            test ah, LEFT_ALIGN_FLAG
                     jnz print_right_part    ; output right spaces, if needed
                     add esp, 4
 .after_all:         add ebp, 8              ; EBP = next(...)
                     pop ebx
                     pop edx
-                    xor ebx, ebx
-                    xor edx, edx
+	            xor bh, bh
+	            xor edx, edx
                     jmp hw_sprintf.next_char
 
 .revert_sign:       neg edx
@@ -242,6 +247,7 @@ print_long:         push ebx                ; looks similar to out32,
                     mov [ebp + 4], edx
                     or byte [esp + 4], REVERTED_SIGN_FLAG
                     jmp .stage1
+
 
 ;prints integer, stored in [ebp] according to flsgs
 print_int           push edx                ;Width (stored in [esp+4]
@@ -264,10 +270,10 @@ print_int           push edx                ;Width (stored in [esp+4]
                     jg  .loop_stage1
 		    xor edx, edx
 ;prints sign, spaces and zeros, if need.
-                    
+                    push .stage2
                     jmp print_left_part
 ;module print
-.stage2             
+.stage2
                     lea edi, [edi+ecx]
 	            mov eax, [ebp]
                     mov ebx, 10
@@ -284,12 +290,12 @@ print_int           push edx                ;Width (stored in [esp+4]
                     cmp eax, 0
                     jg .loop_stage2
 		    
-	
                     lea edi, [edi+ecx]
-                    ;push .stage3
-                    test byte[esp+4], LEFT_ALIGN_FLAG
+                    push .stage3
+                    mov eax, dword[esp+4]
+	            test ah, LEFT_ALIGN_FLAG
                     jnz print_right_part
-        ;; add esp, 4
+                    add esp, 4
 
 .stage3             add ebp, 4
                     pop ebx
@@ -308,7 +314,8 @@ print_int           push edx                ;Width (stored in [esp+4]
                     jmp print_int.stage1
 
 ;prints sign, spaces or zeros before module.
-print_left_part     sub [esp+4], ecx
+print_left_part     add esp, 4
+	            sub [esp+4], ecx
 	            mov eax, dword[esp]
 	            test ah, REVERTED_SIGN_FLAG | SIGN_FULL_FLAG | ONLY_MINUS_FLAG
                     jnz .reserve_sign_place
@@ -322,8 +329,8 @@ print_left_part     sub [esp+4], ecx
                     jnz .print_space
 .try_print_zeroes   test ah, LEFT_ALIGN_FLAG
                     jz  .print_zeroes
-.to_ret             
-	            jmp print_int.stage2
+.to_ret             sub esp, 4
+	            ret
 	
 
 
@@ -367,15 +374,14 @@ print_left_part     sub [esp+4], ecx
                     jmp .to_ret
 
 ;Prints right part
-print_right_part    mov edx, [esp+4]
+print_right_part    mov edx, [esp+8]
 .right_part_loop    cmp edx, 0
                     jle .right_part_final
                     mov byte [edi], ' '
                     inc edi
                     dec edx
                     jmp .right_part_loop
-	            sub esp, 4
-.right_part_final   jmp print_int.stage3
+.right_part_final   ret
 
 
 ; other functions

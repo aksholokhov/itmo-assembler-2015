@@ -1,0 +1,6 @@
+*.o
+*.a
+tester
+a_hw.asm
+*.sh
+*.asm~

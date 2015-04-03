@@ -1,0 +1,26 @@
+ section .text
+
+
+	extern malloc
+	extern free
+
+
+	global matrixNew
+	global matrixClone
+	global matrixDelete
+	global matrixGetRows
+	global matrixGetCols
+	global matrixGet
+	global matrixSet
+	global matrixScale
+	global matrixAdd
+	global matrixTranspose
+	global matrixMul
+
+		struc	Matrix
+rows:		resq	1
+cols:		resq	1
+real_rows:	resq	1
+real_cols:	resq	1
+cells_addr:	resq	1
+		endstruc

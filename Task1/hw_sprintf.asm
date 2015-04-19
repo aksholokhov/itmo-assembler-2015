@@ -12,15 +12,17 @@ SIGNED_NUM_FLAG     equ  1 << 6         ;id short name - SN_flag
 REVERTED_SIGN_FLAG  equ  1 << 7         ;   short name - RS_flag
 
 
-; SPRINTF FUNCTION
-; edi - output stream address
-; esi - format stream address
-; ebp - current number address
-; bh - flags
-; bl - current character
-; edx - width
-; ecx - start of the control sequence
-
+	;;  SPRINTF FUNCTION		
+	;; TAKES
+	;; 	edi - output stream address
+	;;	esi - format stream address
+	;; 	ebp - current number address
+	;; USES
+	;; 	ebx - flags (bh) and current character
+	;; 	edx - width (if present)
+	;; 	ecx - start of the current control sequence
+	;; OUTS
+	;; 	edi - buffer filled with the string formatted acording to the format string
 hw_sprintf:         push ebp
                     push esi
                     push edi
@@ -130,8 +132,10 @@ hw_sprintf:         push ebp
 ;read functions
 	
 	;; reads int from input buffer and stores it to edx 
-	;; input buffer address - esi
-	;; output int - edx
+	;; TAKES
+	;; 	esi - input buffer address
+	;; OUTS
+	;; 	edx - int we've read
 
 .read_int           push ebx
                     xor eax, eax
@@ -154,8 +158,9 @@ hw_sprintf:         push ebp
 ;Print functions
 
 	;; writes control sequence 'as is' from it's start (used for incorrect sequence printing)
-	;; ecx - start adress of the cuttent control sequence
-	;; edi - output buffer address
+	;; TAKES
+	;; 	ecx - start adress of the cuttent control sequence
+	;; 	edi - output buffer address
 .print_as_is        mov bl, byte [ecx]
                     mov [edi], bl
                     inc edi
@@ -167,23 +172,34 @@ hw_sprintf:         push ebp
                     jmp .next_char
 
 	;; outs one char. Used for writing non-control sequences
+	;; TAKES
+	;; 	ebx - current character (bl)
 .print_char	    mov [edi], bl
 		    inc edi
 		    jmp .next_char
-	;; sets 'signed' flag. Used for separate output 
+	
+	;; sets 'signed' flag. Used for sign and module separate output
+	;; TAKES
+	;; 	ebx - flags (bh)
+	
 .print_signed       or bh, SIGNED_NUM_FLAG
                     jmp .print_unsigned
 
-	;; determines type of the number and uses the proper output function 
+	;; determines type of the number and uses the proper output function
+	;; TAKES
+	;; 	ebx - flags (bh)
 .print_unsigned     test bh, LONG_FLAG
                     jnz print_long
                     jmp print_int
 
 
 	;; prints long long to out buffer
-	;; ebp - address of the long number
-	;; edi - out buffer
-	;; ebx - flags
+	;; TAKES
+	;; 	ebp - address of the long number
+	;; 	edi - out buffer
+	;; 	ebx - flags
+	;; USES
+	;; 	eax, ecx, edx - temporary variables
 print_long:         push edx                
                     push ebx               
                     xor ebx, ebx            
@@ -192,11 +208,11 @@ print_long:         push edx
                     mov ecx, 10
 	            mov ebx, dword[esp+4]
                     test bh, SIGNED_NUM_FLAG
-                    jz .stage1	                             	; if out is signed
-                    cmp edx, 0           ; and arg is negative,
-                    jl .revert_sign     ; negate arg and use it as unsigned
-	;; Counts lenght of the number. Divide higher part (with memorizing), then lower part and compare it with 0
-.stage1             xor ebx, ebx
+                    jz .stage1	; if not signed, print as-is
+                    cmp edx, 0	; or, if signed and negative,
+                    jl .revert_sign ; revert sign and print as positive
+	
+.stage1             xor ebx, ebx ; Length of the number calculating.
 .stage1_loop:       push eax
                     mov eax, edx
                     xor edx, edx
@@ -207,12 +223,12 @@ print_long:         push edx
                     inc ebx
                     test eax, eax
                     jnz .stage1_loop
-                    test edx, edx           ; continue while (EDX:EAX) != 0
+                    test edx, edx           
                     jnz .stage1_loop
                     push .stage2
 	            mov ecx, ebx
                     jmp print_left_part       ; outs possible left part (sign, zeroes, spaces)
-	;; outs long long. Algorithm uses the fact that (EDX:EAX) % 10 is equal to (6 * (EAX % 10) + EBX % 10) % 10; Found it somewhere in StackOverflow.
+	;; Outs module. Algorithm assumes the fact that that (EDX:EAX) % 10 is equal to (6 * (EAX % 10) + EBX % 10) % 10. It's used for separate EDX and EAX processing
 .stage2:            lea edi, [edi + ebx]
                     mov ecx, 10
 .loop_stage2:       dec edi
@@ -221,14 +237,13 @@ print_long:         push edx
                     xor edx, edx            
                     div ecx                 
                     lea eax, [edx * 3]
-                    lea eax, [eax * 2]      ; EAX = 6 * (EDX % 10)
-                    push eax                ;     = (2^32 * EDX) % 10
+                    lea eax, [eax * 2]     
+                    push eax               
                     xor edx, edx
                     mov eax, [ebp]
                     div ecx
                     pop eax
-                    lea eax, [eax + edx]    ; al  = (2^32 * EDX + EAX) % 10
-                                            ;     = (EDX:EAX) % 10
+                    lea eax, [eax + edx]    ; al  = (2^32 * EDX + EAX) % 10 = (EDX:EAX) % 10
                     mov al, [rem_table + eax]
                     add [edi], al
                     mov eax, [ebp]
@@ -250,7 +265,7 @@ print_long:         push edx
                     push .after_all
                     mov eax, dword [esp + 8]
 	            test ah, LEFT_ALIGN_FLAG
-                    jnz print_right_part    ; output possible right spaces
+                    jnz print_right_part    ; outs possible right spaces
                     add esp, 4
 .after_all:         add ebp, 8              
                     pop ebx
@@ -269,14 +284,17 @@ print_long:         push edx
 
 
 	;; prints integer according to flags
-	;;  ebp - address of the integer
-	;;  ebx - flags
-	;;  edi - output buffer
+	;; TAKES
+	;; 	ebp - address of the integer
+	;; 	ebx - flags
+	;; 	edi - output buffer
+	;; USES
+	;; 	edx, eax, ecx - temp variables
 print_int           push edx                ;Width (stored in [esp+4]
                     push ebx                 ;Flags (stored in [esp]
                     mov ecx, dword[esp]
-	            test ch, SIGNED_NUM_FLAG
-                    jz  .stage1             ;Length calculating
+	            test ch, SIGNED_NUM_FLAG ;Looks simular with long-long prining. Negates number if it's negative and prints sign and flag separately
+                    jz  .stage1             
                     cmp dword[ebp], 0
                     jl  .revert_sign
 	
@@ -295,7 +313,7 @@ print_int           push edx                ;Width (stored in [esp+4]
 	;; prints sign, spaces and zeros, if needed.
                     push .stage2
                     jmp print_left_part
-	;; prints module of the number. Trivial algorithm
+	;; prints module of the number. Trivial algorithm.
 .stage2
                     lea edi, [edi+ecx]
 	            mov eax, [ebp]
@@ -317,7 +335,7 @@ print_int           push edx                ;Width (stored in [esp+4]
                     push .stage3
                     mov eax, dword[esp+4]
 	            test ah, LEFT_ALIGN_FLAG
-                    jnz print_right_part ;prints zeroes if needed
+                    jnz print_right_part ;prints right spaces if needed
                     add esp, 4
 
 	;;  final stage. Restores registers and cleans flags
@@ -329,7 +347,8 @@ print_int           push edx                ;Width (stored in [esp+4]
                     jmp hw_sprintf.next_char
 
 	;; reverts sign of the number
-	;; ebp - adress of the number needs to be reverted 
+	;; TAKES
+	;;	 ebp - adress of the number needs to be negated 
 .revert_sign        mov ecx, dword[esp]
 	            or ch, REVERTED_SIGN_FLAG
                     mov [esp], ecx
@@ -339,9 +358,10 @@ print_int           push edx                ;Width (stored in [esp+4]
                     jmp print_int.stage1
 
 	;; outs sign, spaces and zeroes before number according to the flags
-	;; ecx - length of the number
-	;; esp - flags
-	;; edi - address of the output buffer
+	;; USES
+	;; 	ecx - length of the number
+	;; 	esp - flags
+	;; 	edi - address of the output buffer
 print_left_part     add esp, 4
 	            sub [esp+4], ecx
 	            mov eax, dword[esp]
@@ -363,7 +383,6 @@ print_left_part     add esp, 4
 
 
 	;; Helpers for left part printing
-
 	
 .reserve_sign_place dec dword[esp+4]
                     jmp .after_reservation

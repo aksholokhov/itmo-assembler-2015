@@ -1,408 +1,447 @@
  section .text
 
 
-	extern malloc
-	extern align_alloc
-	extern free
+extern malloc
+extern free
 
 
-	global matrixNew
-	global matrixClone
-	global matrixDelete
-	global matrixGetRows
-	global matrixGetCols
-	global matrixGet
-	global matrixSet
-	global matrixScale
-	global matrixAdd
-	global matrixTranspose
-	global matrixMul
+global matrixNew
+global matrixClone
+global matrixDelete
+global matrixGetRows
+global matrixGetCols
+global matrixGet
+global matrixSet
+global matrixScale
+global matrixAdd
+global matrixTranspose
+global matrixMul
 
-		struc	Matrix
-rows:		resq	1
-cols:		resq	1
-real_rows:	resq	1
-real_cols:	resq	1
-cells:		resq	1
-		endstruc
 
+	;; Matrix structure
+	;; 	rows - declared number of rows
+	;; 	cols - declared number of cols
+	;; 	real_rows - real number of rows (=rows ceiled by 4)
+	;; 	real_cols - real number of cols (=cols ceiled by 4)
+	;; 	cells - address of the beginning of cells array
+
+                    struc   Matrix
+rows:               resq    1                      
+cols:               resq    1                      
+real_rows:          resq    1                      
+real_cols:          resq    1                      
+cells:              resq    1                      
+                    endstruc
+
+	;; Macro for ceiling by 4
+	;; Takes:
+	;; 	%1 - destination
+	;; 	%2 - ceiling number
+	;; Returns:
+	;; 	%1 = (%2 - 1) /4 * 4 + 4 = ceil(%2) by 4.
+	
+%macro ceil 2
+	mov %1, %2
+	dec %1
+	shr %1, 2
+	shl %1, 2
+	lea %1, [%1 + 4]
+%endmacro
+	
+	;; casn (Cells ASSigN)
+	;; Macro for assignment the %3 value for all cells in matrix
+	;; Takes:
+	;; 	%1 - address of the first cell in cells array
+	;; 	%2 - number of cells
+	;; 	%3 - assigned value
+	;; Uses:
+	;; 	rdi, rcx, rax - rep requirements
+	;; Returns:
+	;; 	%1 - array of cells, valueted by %3
+%macro casn 3
+	mov rdi, %1
+	mov rcx, %2
+	mov eax, %3
+	cld
+	rep stosd
+%endmacro
+	
 	;;  Matrix matrixNew(unsigned int rows, unsigned int cols);
 	;;
 	;;  Takes:
-	;;    RDI - unsigned int rows
-	;;    RSI - unsigned int cols
+	;;  	RDI - number of the rows
+	;;  	RSI - number of the cols 
 	;;  Returns:
 	;;    RAX - Matrix (=R8)
 	;;  Uses:
 	;;	R8 - Matrix
 	;; 	R10 - temp variable for rows
 	;; 	R11 - temp variable for cols
+matrixNew:		push	rdi
+        		push	rsi
+        		mov	rdi, Matrix_size
+        		call	malloc
+        		mov 	r8, rax
+        		pop	rsi
+        		pop	rdi
+        		mov	[r8 + rows], rdi
+        		mov	[r8 + cols], rsi
+			ceil	rdi, rdi
+      			ceil	rsi, rsi
+        		mov	[r8 + real_rows], rdi
+        		mov	[r8 + real_cols], rsi
+        		imul	rdi, rsi
+        		shl	rdi, 4
+        		push	rdi
+        		push	r8
+        		call	malloc                    
+        		pop	r8
+			mov	[r8 + cells], rax		
+        		pop	r9
+        		shr	r9, 2
+			casn	rax, r9, 0
+        		mov	rax, r8
+        		ret
 
-	;; Notes:
-	;; 	For alignment by 4 it uses this formulae
-	;;	R10 = ceil(rows / 4) * 4
-	;;	R11 = ceil(cols / 4) * 4
-	;; 	Alignment by 4 required for SSL using
-	
-matrixNew:	push	r8
-		push	r10
-		push	r11
-		mov	r10, rdi
-		mov	r11, rsi
-		mov 	rdi Matrix_size
-		call 	malloc
-		mov 	r8, rax
-		mov 	[r8 + rows], r10
-		mov 	[r8 + cols], r11
-	;; ceiling algorithm
-		dec 	r10
-		shr 	r10, 2
-		shl 	r10, 2
-		lea 	r10, [r10 + 4]
-		mov 	[r8 + real_rows], r10
-		dec 	r11
-		shr 	r11, 2
-		shl 	r11, 2
-		lea 	r11, [r11 + 4]
-		mov	[r8 + real_cols], r11
-		imul	r10, r11
-		lea	r10, [r10*4]
+
+	;;  Matrix matrixCopy(Matrix matrix);
+	;;  clones the [rdi] matrix
+	;;  Takes:
+	;;   	RDI - matrix
+	;;  Returns:
+	;;  	RAX - new Matrix (=RDX)
+	;;  Uses:
+	;;  	R8 - Matrix matrix (=RDI)
+
+matrixCopy:	mov	r11, [rdi + cols]
+		mov	r10, [rdi + rows]
+		mov	r12, rdi
 		mov	rdi, r10
-		mov	rsi, 4
-		call	allign_alloc
-		mov	[r8 + cells], rax
-.cells_loop	mov 	[rax], 0
-		dec	r10
-		add	rax, 4
-		cmp	r10, 0
-		jg	.cells_loop
-		mov	rax, r8
-		pop 	r11
-		pop	r10
-		pop	r8
-		ret
+		mov	rsi, r11
+		push	r12
+		call	matrixNew
+		pop	r12
 
-
-	;;  void matrixDelete(Matrix matrix);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-
-matrixDelete:	mov r10, rdi
-		mov rdi, [rdi + cells]
-		call free
-		mov rdi, r10
-		call free
-		ret
-
-	;;  unsigned int matrixGetRows(Matrix matrix);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;  Returns:
-	;;    RAX - matrix.rows
-
-matrixGetRows:	mov rax, [rdi + rows]
-	        ret
-
-	;;  unsigned int matrixGetCols(Matrix matrix);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;  Returns:
-	;;    RAX - matrix.cols
-
-matrixGetCols:	mov rax, [rdi + cols]
-	        ret
-
-
-	;;  Matrix matrixClone(Matrix matrix);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;  Returns:
-	;;    RAX - new Matrix (=RDX)
-	;;  Uses:
-	;;    R8 - Matrix matrix (=RDI)
-matrixCopy:	push r10
-		push r12
-		mov r11, [rdi + cols]
-		mov r10, [rdi + rows]
-		mov r12, rdi
-		mov rdi, r10
-		mov rsi, r11
-		push r12
-		call matrixNew
-		pop r12
-		mov rcx, [r12 + real_rows]
-		imul rcx, [r12 + real_cols]
-		mov rsi, [r8 + cells]
-		mov rdi, [rax+ cells]
+		mov	rcx, [r12 + real_rows]
+		imul	rcx, [r12 + real_cols]
+		mov	rsi, [r12 + cells]
+		mov	rdi, [rax + cells]
 		cld
-		rep movsd
-		pop r12
-		pop r10
+		rep	movsd
 		ret
 
-	;;  float matrixGet(Matrix matrix, unsigned int row, unsigned int col);
+	;;void matrixDelete(Matrix matrix);
+	;;Delletes the [rdi] matrix
+	;;Takes:
+	;;	RDI -  matrix
+
+matrixDelete:	push	rdi
+		mov	rdi, [rdi + cells]
+		call	free
+		pop	rdi
+		call	free
+		ret
+
+
+	;;unsigned int matrixGetRows(Matrix matrix);
+	;; 
+	;;returns the number of rows in [rdi] matrix
+	;;Takes:
+	;;	RDI - Matrix matrix
+	;;Returns:
+	;;	RAX - matrix.rows
+
+matrixGetRows:	mov	rax, [rdi + rows]
+	        ret
+
+
+
+	;;unsigned int matrixGetCols(Matrix matrix);
 	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;    RSI - unsigned int row
-	;;    RDX - unsigned int col
-	;;  Returns:
-	;;    XMM0 - matrix.cells[index]
-	;;  Uses:
-	;;    R8 - matrix.cells
-	;;    R9 - index (=row * cols_align + col) 
+	;;returns the number of cols in [rdi] matrix
+	;;Takes:
+	;;	RDI - Matrix matrix
+	;;Returns:
+	;;	RAX - matrix.cols
+
+matrixGetCols:	mov	rax, [rdi + cols]
+	        ret
+
+
+
+
+	;;float matrixGet(Matrix matrix, unsigned int row, unsigned int col);
+	;;
+	;;Returns the current cell in cells array
+	;;Takes:
+	;;	RDI - matrix
+	;;	RSI - number of the row
+	;;	RDX - number of the col
+	;;Returns:
+	;;	XMM0 - cells[RSI, RDX]
+	;;Uses:
+	;;	R10 - matrix.cells
+	;;	R11 - index
+	;; 	R12 - temporary variable
 	
-matrixGet:	push r10
-		push r11
-		push r12
-		mov r12, rdi
-		mov r11, [r12 + real_cols]
-		imul r11, rsi
-		lea r11, [r11 + rdx]
-		mov r10, [r12 + cells]
-		movss xmm0, [r10 + r11*4]
-		pop r12
-		pop r11
-		pop r10
+matrixGet:	push	r10
+		push	r11
+		push	r12
+		mov	r12, rdi
+		mov	r11, [r12 + real_cols]
+		imul	r11, rsi
+		lea	r11, [r11 + rdx]
+		mov	r10, [r12 + cells]
+		movss	xmm0, [r10 + r11*4]
+		pop	r12
+		pop	r11
+		pop	r10
 		ret
 
-	;;  void matrixSet(Matrix matrix, unsigned int row, unsigned int col, float valu\e)			;
+	;;void matrixSet(Matrix matrix, unsigned int row, unsigned int col, float value)			;
 	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;    RSI - unsigned int row
-	;;    RDX - unsigned int col
-	;;    XMM0 - float value
-	;;  Uses:
-	;;    R8 - matrix.cells
-	;;    R9 - index (=row * cols_align + col)
+	;;sets the value of the current cell to 'value'
+	;;Takes:
+	;;	RDI - matrix
+	;;	RSI - number of row
+	;;	RDX - number of  col
+	;;	XMM0 - float value
+	;;Uses:
+	;;	R10 - matrix.cells
+	;;	R12 - index
+	;; 	R11 - temporary variable
 
-matrixSet:	push r10
-		push r11
-		push r12
-		mov r12, rdi
-		mov r11, [r12 + real_cols]
-	        imul r11, rsi
-		lea r11, [r11 + rdx]
-		mov r10, [r12 + cells]
-		movss [r10 + r11*4], xmm0
-		pop r12
-		pop r11
-		pop r10
+matrixSet:	push	r10
+		push	r11
+		push	r12
+		mov	r12, rdi
+		mov	r11, [r12 + real_cols]
+	        imul	r11, rsi
+		lea	r11, [r11 + rdx]
+		mov	r10, [r12 + cells]
+		movss	[r10 + r11*4], xmm0
+		pop	r12
+		pop	r11
+		pop	r10
 		ret
 
-	;;  Matrix matrixScale(Matrix matrix, float k);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix
-	;;    XMM0 - float k
-	;;  Returns:
-	;;    RAX - new Matrix
-	;;  Uses:
-	;;    RCX - (matrix.rows_align * matrix.cols_align) / 4
-	;;    RDX - new_matrix.cells
 
-matrixScale:	push r8
-		push r9
-		push r10
-		shufps xmm0, xmm0, 0
-		call matrixCopy
-		mov r8, rax
-		mov r10, [r8 + cells]
-		mov r9, [r8 + real_rows]
-		imul r9, [r8 + real_cols]
-		shr r9, 2
+	;;Matrix matrixScale(Matrix matrix, float k);
+	;;
+	;;Scales given matrix according tho the given coefficient (k)  
+	;;Takes:
+	;;	RDI - matrix
+	;;	XMM0 - scale coefficient
+	;;Returns:
+	;;	RAX - scaled matrix
+	;;Uses:
+	;;	R9 - pointer to the first cell in quartas of cells for SLL operations
+	;;	R10 - temporary variable
+
+matrixScale:	shufps	xmm0, xmm0, 0
+		call	matrixCopy
+		mov	r8, rax
+		mov	r10, [r8 + cells]
+		mov	r9, [r8 + real_rows]
+		imul	r9, [r8 + real_cols]
+		shr	r9, 2	;splitting all cells by quartas	
 		
-.loop		movups, xmm1, [r8]
-		mulps xmm1, xmm0
-		movups [r8], xmm1
-		lea r8, [r8 + 16]
-		dec r9
-		jnz .loop
-		mov rax, r8
-		pop r10
-		pop r9
-		pop r8
+.loop		movups	xmm1, [r10]
+		mulps	xmm1, xmm0
+		movups	[r10], xmm1
+		lea	r10, [r10 + 16]
+		dec	r9
+		jnz	.loop
+		mov	rax, r8
 		ret
+
+
+;;Helping macro which adds four cells of one matrix to another
+%macro add4cl 2
+	movups	xmm0, [%1]
+	addps	xmm0, [%2]
+	movups	[%1], xmm0
+%endmacro
 
 	;;  Matrix matrixAdd(Matrix a, Matrix b);
 	;;
 	;;  Takes:
-	;;    RDI - Matrix a
-	;;    RSI - Matrix b
+	;;    RDI - matrix a
+	;;    RSI - matrix b
 	;;  Returns:
-	;;    RAX - new Matrix
+	;;    RAX - sum of the matrix a and matrix b
 	;;  Uses:
-	;;    RCX - (new_matrix.rows_align * new_matrix.cols_align) / 4
-	;;    RDX - new_matrix.cells
-	;;    R8 - temporary register 1
-	;;    R9 - temporary register 2
-	
-	 
-	
-matrixAdd:	push r8
-		mov r8, [rdi + cols]
-		cmp r8, [rsi + cols]
-		jne .fail
-		mov r8, [rdi + rows]
-		cmp r8, [rsi + rows]
-		jne .fail
-		call matrixClone
-		mov rcx, [rax + real_cols]
-		imul rcx, [rax + real_rows]
-		shr rcx, 2
-		mov rdx, [rax + cells]
-		mov rsi, [rsi + cells]
-.loop		movups xmm0, [rdx]
-		addps xmm0, [rsi]
-		movups [rdx], xmm0
-		lea rdx, [rdx + 16]
-		lea rsi, [rsi + 16]
-		dec rcx
-		jnz .loop
-		pop r8
+	;;    RCX - pointer to the quarta of cells for SSL operations
+	;;    RDX - pointer to the cell of matrix
+	;;    R8 - temporary variable
+	;;    R9 - temporary variable
+matrixAdd:	mov	r8,[rdi + cols]
+		mov	r9, [rsi + cols]
+		cmp	r8, r9	;	if matrix a has
+		jne	.fail	;	another number of
+		mov	r8, [rdi + rows] ;	cols or rows
+		mov	r9, [rsi + rows] ;	then we willn't
+		cmp	r8, r9	     ;  sum this matrix 
+		jne	.fail	     
+		push	rsi
+		call	matrixCopy
+		pop	rsi
+		mov	rcx, [rax + real_cols]
+		imul	rcx, [rax + real_rows]
+		shr	rcx, 2		;	splitting cells by quartas
+		mov	rdx, [rax + cells]
+		mov	r8, [rsi + cells]
+.loop		add4cl	rdx, r8
+		lea	rdx, [rdx + 16]
+		lea	r8, [r8 + 16]
+		dec	rcx
+		jnz	.loop
 		ret
-.fail		xor rax, rax
-		pop r8
+.fail		xor rax, rax	
 		ret
-
-
-	;;  Matrix matrixTranspose(Matrix matrix);
-	;;
-	;;  Takes:
-	;;    RDI - Matrix matrix (m*n)
-	;;  Returns:
-	;;    RAX - matrix^T (n*m)
-	;;  Uses:
-	;;    R8 - m
-	;;    R9 - n
-	;;    R10 - mx_index
-	;;    R11 - new_mx_index
-	;;    RCX - i (0..m-1)
-	;;    RDX - j (0..n-1)
 	
+	;; qtrp (Quanta TRansPose)
+	;; Helping macro for transposing one quarta. Used for fast SSL matrix transposition
+%macro qtrp 3 			
+	movups xmm0, [%2]
+	movss [%3], xmm0 
+	psrldq xmm0, 4
+	lea %3, [%3 + %1 * 4]
+	movss [%3], xmm0 
+	psrldq xmm0, 4
+	lea %3, [%3 + %1 * 4]
+	movss [%3], xmm0 
+	psrldq xmm0, 4
+	lea %3, [%3 + %1 * 4]
+	movss [%3], xmm0 
+	lea %3, [%3 + %1 * 4]
+%endmacro
 
+	;; Matrix matrixTranspose(Matrix matrix)
+	;; Transposes the given matrix. Not the part of the task but it gives us an opportunity to use
+	;; SSL operations in matrixMul simplier then without transposition
+	;; Takes:
+	;; 	RDI - matrix
+	;; Returns:
+	;; 	RAX - transposed matrix
 matrixTranspose:
-		push r8
-		push r9
-		push r10
-		push r11
-		mov r10, rdi
-		mov rdi, [rdi + cols]
-		mov rsi, [rdi + rows]
-	        call matrixNew
-	        mov rdi, r10
-	        mov r8, [rax + real_cols]
-	        mov r9, [rax + real_rows]
-	        mov r10, [rdi + cells]
-	        mov rdi, [rax + cells]
-	        xor rcx, rcx
-.loop_1:	xor rdx, rdx
-	        lea r11, [rdi + rcx * 4]
-.loop_2:	movups xmm0, [r10]
-		mov r12, 3
-.loop_3:	movss [r11], xmm0 
-	        psrldq xmm0, 4
-	        lea r11, [r11 + r8 * 4]
-		dec r12
-		cmp  r12, 0
-		jg .loop3
-	
-        	movss [r11], xmm0
-	        lea r11, [r11 + r8 * 4]
+		push	rdi
+		mov	rsi, [rdi + rows]
+		mov	rdi, [rdi + cols]
+	        call	matrixNew
+	        pop	rdi
+	        mov	r8, [rax + real_cols]
+	        mov	r9, [rax + real_rows]
+	        mov	r10, [rdi + cells]
+		mov	rdi, [rax + cells]
 
-		lea rdx, [rdx + 4]
-	        lea r10, [r10 + 16]
-	        cmp rdx, r9
-	        jb .loop_2
-	        inc rcx
-	        cmp rcx, r8
-	        jb .loop_1
-		pop r11
-		pop r10
-		pop r9
-		pop r8
+	        xor	rcx, rcx
+.loop_1:	xor	rdx, rdx
+	        lea	r11, [rdi + rcx * 4]
+.loop_2:	qtrp	r8, r10, r11
+		lea	rdx, [rdx + 4]
+	        lea	r10, [r10 + 16]
+	        cmp	rdx, r9
+	        jb	.loop_2
+	        inc	rcx
+	        cmp	rcx, r8
+	        jb	.loop_1
 	        ret
 
-
-	;;  Matrix matrixMul(Matrix a, Matrix b);
+	;; scpr (SCalar PRoduction)
+	;; scalar production of two 4-vectors
+	;; helping macro, uses in matrixMul
+	;; Takes:
+	;; 	RDI - first 4-vector
+	;; 	RSI - second 4-vector
+	;; Uses:
+	;; 	xmm0 - accumulator
+	;; Returns:
+	;; 	xmm0 - xmm0 += scalar production of rdi and rsi 4-vectors
+%macro scpr 3
+	movups 	xmm1, [%1 + r10]        
+        movups	xmm2, [%2 + r10]
+        dpps	xmm1, xmm2, 0xF1
+        addss	%3, xmm1
+%endmacro                    
+	
+	
+	;;Matrix matrixMul(Matrix a, Matrix b);
 	;;
-	;;  Takes:
-	;;    RDI - Matrix a (m*n)
-	;;    RSI - Matrix b (n*p)
-	;;  Returns:
-	;;    RAX - new Matrix (m*p)
-	;;  Uses:
-	;;    R8 - i (m-1..0)
-	;;    R9 - j (p-1..0)
-	;;    R10 - n
-	;;    R11 - k (0..n-1)
-	;;    RCX - new_mx_index
-	;;    RBX - temporary variable 1
-	;;    RBP - temporary variable 2
-	;;    RDX - temporary variable 3
-
-matrixMul:	mov r9, [rsi + rows]
-	        cmp r8, [rsi + cols]
-	        jne .fail
-
-        	push rbx
-	        push rbp
-	        push rdi
-	        push rsi
-	        mov rdi, rsi
-	        call matrixTranspose
-	        pop rsi
-	        pop rdi
-	        push rax
-	        push rdi
-	
-	        mov rdi, [rdi + rows]
-	        mov rsi, [rsi + cols]
-	        call matrixNew 
-	        mov rcx, [rax + cells]
-	        pop rdi
-	        pop rsi
-	        push rsi
-	        mov r8, [rdi + real_rows]
-	        mov r9, [rsi + real_rows]
-	        mov r10, [rdi + real_cols]
-	        mov rdi, [rdi + cells]
-	        mov rsi, [rsi + cells]
-	        mov rdx, rsi
-	        mov rbx, r10
-	        shl rbx, 2
-	        mov rbp, r9
-.loop_1:        mov rsi, rdx
-	        mov r9, rbp
-.loop_2:        xor r10, r10
-	        xorps xmm0, xmm0
-.loop_3:        movups xmm1, [rdi + r10] ; calculate dot product
-	        movups xmm2, [rsi + r10]
-	        dpps xmm1, xmm2, 0xF1
-	        addss xmm0, xmm1
-	        add r10, 16
-	        cmp r10, rbx
-	        jne .mul_loop_3
-	        add rsi, rbx
-	        movss [rcx], xmm0
-	        add rcx, 4
-	        dec r9
-	        jnz .mul_loop_2
-	        add rdi, rbx
-	        dec r8
-	        jnz .mul_loop_1
-	        pop rdi
-	        push rax
-	        call matrixDelete ; deallocate b^T
-	        pop rax
-	        pop rbp
-	        pop rbx
-	        ret
-.fail:          xor rax, rax
-	        ret
+	;;Muls two matrix
+	;;Takes:
+	;;	RDI - Matrix a (m*n)
+	;;	RSI - Matrix b (n*p)
+	;;Returns:
+	;;	RAX - Matrix c (m*p) = a * b
+	;;Uses:
+	;;	R8 - i 
+	;;	R9 - j 
+	;;	R10 - n
+	;;	R11 - k
+	;;	RBX - temporary variable 1
+	;;	RBP - temporary variable 2
+	;;	RDX - temporary variable 3
+matrixMul:	mov	r8, [rdi + cols]
+                mov	r9, [rsi + rows]
+                cmp	r8, r9			; if num of colums of matrix a
+                jne	.fail			; is differ from matrix b, then fail	
+                push	rbx
+                push	rbp
+	;; transpose second matrix for better SSL using
+        	push	rdi
+                push	rsi
+                mov	rdi, rsi
+                call	matrixTranspose
+                pop	rsi
+                pop	rdi
+	;; create template for new [m*p] matrix for result
+                push	rax
+                push	rdi
+                mov	rdi, [rdi + rows] 	
+                mov	rsi, [rsi + cols]
+                call	matrixNew 		
+                mov	rcx, [rax + cells]
+                pop	rdi
+                pop	rsi
+	;; preparation before multiplication
+		push	rsi
+                mov	r8, [rdi + real_rows]
+                mov	r9, [rsi + real_rows]
+                mov	r10, [rdi + real_cols]
+	        mov	rdi, [rdi + cells]
+		mov	rsi, [rsi + cells]
+		mov	rdx, rsi
+		mov	rbx, r10
+                shl	rbx, 2
+		mov 	rbp, r9
+        ;; for (i = m - 1; i >= 0; i--) 
+.loop_1:        mov	rsi, rdx
+        	mov	r9, rbp
+	;; for (j = p - 1; j >= 0; j--)
+.loop_2:        xor 	r10, r10
+                xorps	xmm0, xmm0
+	;; for (k = 1; k<=n; shl k, 2)
+.loop_3:        scpr	rdi, rsi, xmm0
+                lea	r10, [r10 + 16]
+		cmp	r10, rbx
+                jne	.loop_3
+                add	rsi, rbx
+                movss	[rcx], xmm0
+                lea	rcx, [rcx + 4]
+                dec	r9
+		jnz	.loop_2
+                add	rdi, rbx
+                dec	r8
+                jnz	.loop_1
+		pop	rdi
+	;; delete transposed matrix
+                push	rax
+                call	matrixDelete               
+                pop	rax
+                pop 	rbp
+                pop	rbx
+                ret
+.fail:	        xor	rax, rax
+                ret
 	

@@ -84,7 +84,7 @@ hw_sprintf:         push ebp
 
 	;;  Sets CONTROL FLAG if it wasn't or prints incorrect control seq if it was. Stores the position of the start of the current contorl sequence in ecx
 .set_C_flag         test bh, CONTROL_FLAG
-                    jnz .print_as_is
+                    jnz .print_percent
 	            mov ecx, esi
                     or  bh, CONTROL_FLAG
                     jmp .next_char
@@ -161,15 +161,24 @@ hw_sprintf:         push ebp
 	;; TAKES
 	;; 	ecx - start adress of the cuttent control sequence
 	;; 	edi - output buffer address
-.print_as_is        mov bl, byte [ecx]
+.print_as_is        
+.as_is_loop         mov bl, byte [ecx]
                     mov [edi], bl
                     inc edi
                     inc ecx
                     cmp ecx, esi
-                    jbe .print_as_is
+                    jbe .as_is_loop
                     xor ecx, ecx
                     xor bh, bh
+	            
                     jmp .next_char
+
+.print_percent	    mov byte [edi], '%'
+		    inc edi
+		    xor ecx, ecx
+	            xor bh, bh
+		    jmp .next_char
+
 
 	;; outs one char. Used for writing non-control sequences
 	;; TAKES
@@ -202,11 +211,11 @@ hw_sprintf:         push ebp
 	;; 	eax, ecx, edx - temporary variables
 print_long:         push edx                
                     push ebx               
-                    xor ebx, ebx            
+                   
                     mov eax, [ebp]          ; load lower and higher parts
                     mov edx, [ebp + 4]      ; of the number to (EDX:EAX)
                     mov ecx, 10
-	            mov ebx, dword[esp+4]
+	           
                     test bh, SIGNED_NUM_FLAG
                     jz .stage1	; if not signed, print as-is
                     cmp edx, 0	; or, if signed and negative,
@@ -225,6 +234,8 @@ print_long:         push edx
                     jnz .stage1_loop
                     test edx, edx           
                     jnz .stage1_loop
+		    
+	            
                     push .stage2
 	            mov ecx, ebx
                     jmp print_left_part       ; outs possible left part (sign, zeroes, spaces)
@@ -279,9 +290,10 @@ print_long:         push edx
                     sbb edx, 0
                     mov [ebp], eax
                     mov [ebp + 4], edx
-                    or byte [esp + 4], REVERTED_SIGN_FLAG
-                    jmp .stage1
-
+                    or bh, REVERTED_SIGN_FLAG
+		    mov [esp], ebx
+		    jmp .stage1
+ 
 
 	;; prints integer according to flags
 	;; TAKES

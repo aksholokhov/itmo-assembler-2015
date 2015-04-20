@@ -1,23 +1,45 @@
-ASM_FLAGS = -f elf32
-CXX_FLAGS = -m32 -L. -I include
+#include <hw1.h>
 
-all: tester
+#include <cstdio>
+#include <limits>
 
-clean:
-	rm -f libhw.a
-	rm -f libhw.o
-	rm -f tester.o
-	rm -f tester
-	rm -f core
+using namespace std;
 
-tester: libhw.a tester.o
-	g++ -o tester $(CXX_FLAGS) tester.o -lhw
-
-tester.o: tester.cpp
-	g++ -o tester.o $(CXX_FLAGS) -c tester.cpp
-
-libhw.a: libhw.o
-	ar rcs libhw.a libhw.o
-
-libhw.o: hw_sprintf.asm
-	yasm -g dwarf2 -o libhw.o $(ASM_FLAGS) hw_sprintf.asm
+int main() {
+    char out[256];
+    hw_sprintf(out, "Hello world %d!\n", 239);
+    printf("%s", out);
+    hw_sprintf(out, "%0+5d\n", 51);
+    printf("%s", out);
+    hw_sprintf(out, "<%12u=%-12i>\n", 1234, numeric_limits<int>::min());
+    printf("%s", out);
+    hw_sprintf(out, "<%12i=%-12u>\n", -1, -1);
+    printf("%s", out);
+    hw_sprintf(out, "%ll+010d\n", (long long)-17);
+    printf("%s", out);
+    hw_sprintf(out, "%lli\n", (long long)-1);
+    printf("%s", out);
+     hw_sprintf(out, "%wtf\n", 1, 2, 3, 4);
+    printf("%s", out);
+    hw_sprintf(out, "50%%\n");
+    printf("%s", out);
+    hw_sprintf(out, "%%%d\n", 123);
+    printf("%s", out);
+    hw_sprintf(out, "%-10%=\n");
+    printf("%s", out);
+    hw_sprintf(out, "%50-%=\n");
+    printf("%s", out);
+    hw_sprintf(out, "%+10-0000d\n", 123);
+    printf("%s", out);
+    hw_sprintf(out, "%10lld\n", (long long) 123);
+    printf("%s", out);
+    hw_sprintf(out, "%ll10d\n", (long long) 123);
+    printf("%s", out);
+    hw_sprintf(out, "%ll%d\n", (long long) 123);
+    printf("%s", out);
+    sprintf(out, "%ll%d\n", (long long) 123);
+    printf("%s", out);
+    hw_sprintf(out, "%+-010d=\n", 123);
+    printf("%s", out);
+    return 0;
+}

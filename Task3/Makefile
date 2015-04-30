@@ -11,10 +11,9 @@ clean:
 	rm -f tester.o
 	rm -f libhw.a
 	rm -f asmimpl.o
-	rm -f cimpl.o
 
-tester: libhw.a tester.o cimpl.o
-	$(CC) -o $@ $(CC_OPTS) tester.o cimpl.o -lhw
+tester: libhw.a tester.o 	
+	$(CC) -o $@ $(CC_OPTS) tester.o -lhw
 
 tester.o: tester.c
 	$(CC) -o $@ -c $(CC_OPTS) $^
@@ -25,5 +24,3 @@ libhw.a: asmimpl.o
 asmimpl.o: asmimpl.asm
 	$(ASM) -o $@ $(ASM_OPTS) $^
 
-cimpl.o: cimpl.c
-	$(CC) -o $@ -c $(CC_OPTS) $^

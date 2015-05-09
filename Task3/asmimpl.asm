@@ -9,7 +9,7 @@ section .text
 	global biEnl
 	global biToStringAsIs	;; outs inner array of bInt "as is" (for debugging) TODO: remove from global before submitting
 	global biAddMod		;; |a| + |b|, TODO: remove from global before submitting
-
+	global biSubMod
 	global biFromInt
 	global biFromString
 	global biToString
@@ -432,6 +432,77 @@ biAddMod:	syspush
 		syspop
 		ret
 
+
+
+		;; void biSubMod(BigInt dst, BigInt src)
+		;; dst -= scr as modulo 
+		;; TAKES:
+		;;	RDI - dst (must be bigger than src or equal)
+		;;	RSI - src
+		;; USES:
+		;;	
+		;; RETURNS:
+		;;	RDI - dst - src
+
+biSubMod:	syspush
+		mov	rcx, [rsi + vsize]
+		mov	r9, [rdi + elem]
+		mov	r10, [rsi + elem]
+		xor	rax, rax
+		xor	rdx, rdx
+
+.loop		add	rax, [r9]
+		sub	rax, [r10]
+		jns	.ins_plus		
+		add	rax, BASE
+		mov	[r9], rax
+		mov	rax, -1
+		add	r9, 8
+		add	r10, 8
+		dec	rcx
+		jnz	.loop
+		jmp	.to_loop2		
+.ins_plus	mov	[r9], rax
+		xor	rax, rax
+		add	r9, 8
+		add	r10, 8
+		dec	rcx
+		jnz	.loop
+		
+.to_loop2	mov	rcx, [rdi + vsize]
+		sub	rcx, [rsi + vsize]
+		jz	.to_end
+
+.loop2		add	rax, [r9]
+		jns	.ins_plus2
+		add	rax, BASE
+		mov	[r9], rax
+		mov	rax, -1
+		add	r9, 8
+		dec	rcx		
+		jmp	.loop2		
+.ins_plus2	mov	[r9], rax
+		xor	rax, rax
+		add	r9, 8
+		dec	rcx
+		jnz	.loop2		
+
+.to_end		sub	r9, 8
+		cmp	qword[r9], 0
+		jne	.end
+		call	biPop
+.end		syspop
+		ret
+
+		;; void biAdd(BigInt a, BigInt b);
+		;; a += b (according to the sign);
+		;; TAKES:
+		;;	RDI - BigInt a
+		;;	RSI - BigInt b
+		;; RETURNS:
+		;;
+biAdd:		
+
 		;; Copy BigInt b to BigInt a
 		;; TAKES:
 		;;	RDI - BigInt a
@@ -521,7 +592,7 @@ biToString:	syspush
 		jnz	.reverse_loop
 		mov	byte[rsi], 0
 		pop	rdi
-		call 	free
+		call 	alligned_free
 		pop	rsi
 		mov	al, byte[rsi]
 		syspop	

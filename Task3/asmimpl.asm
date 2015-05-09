@@ -389,13 +389,15 @@ biAddMod:	syspush
 		mov	r11, rdi
 		mov 	r12, rsi
 		mov	rdi, rax
+		mov	r14, BASE
+		xor	rax, rax
 		xor	rdx, rdx
-.loop		mov	rax, [r9]
+.loop		add	rax, [r9]
 		add	rax, [r10]
-		add	rax, rdx
-		div	BASE		
-		mov	rsi, rax
+		div	r14		
+		mov	rsi, rdx
 		call 	biPush
+		xor 	rdx, rdx
 		add	r9, 8
 		add	r10, 8
 		dec	rcx
@@ -405,26 +407,51 @@ biAddMod:	syspush
 		sub	rcx, [r11 + vsize]
 		jz	.last_digit
 
-.loop2		mov	rax, [r10]
-		add	rax, rdx
-		div	BASE
-		mov	rsi, rax
+.loop2		add	rax, [r10]
+		div	r14
+		mov	rsi, rdx
 		call	biPush
+		xor	rdx, rdx
 		add	r10, 8
 		dec	rcx
 		jnz	.loop2	
 
-.last_digit	cmp	rdx, 0
+.last_digit	cmp	rax, 0
 		je	.to_end
-		mov	rsi, rdx
+		mov	rsi, rax
 		call 	biPush
 
-.to_end		xchg	rdi, r11
-		mov	rsi, r12
-		cmp	r13, 0
+.to_end		cmp	r13, 0
 		je	.end
-		xchg	rdi, rsi
-.end		syspop
+		xchg	r11, r12
+.end		mov	rsi, rdi
+		mov	rdi, r11
+		push	r12
+		call    biCopy
+		pop	rsi
+		syspop
+		ret
+
+		;; Copy BigInt b to BigInt a
+		;; TAKES:
+		;;	RDI - BigInt a
+		;;	RSI - BigInt b
+		;; RETURNS:
+		;;	
+biCopy		push	rdi
+		push	rsi
+		mov	rdi, [rdi + elem]
+		call	free
+		pop	rsi
+		pop	rdi
+		mov	rax, [rsi + elem]
+		mov	[rdi + elem], rax
+		mov	rax, [rsi + vsize]
+		mov	[rdi + vsize], rax
+		mov	rax, [rsi + limit]
+		mov	[rdi + limit], rax
+		mov	rax, [rsi + sign]
+		mov	[rsi + sign], rax		
 		ret
 
 		;; void biToStringAsIs(BigInt src, char* buf)

@@ -18,6 +18,7 @@ section .text
 	global biAdd
 	global biSub
 	global biMul
+	global biMulSc
 	global biCmp
 
 TEN 	equ	10		;; It's ten, suddenly. 
@@ -115,6 +116,7 @@ biInit:		syspush
 		call	alligned_malloc
 		pop	r9
 		mov	[r9 + elem], rax
+		;;TODO zero to limit
 		mov	rax, r9	
 		pop	rdx
 		pop	rsi
@@ -127,21 +129,18 @@ biInit:		syspush
 	;; Delete the BigInt a with his inner vector
 	;; TAKES:
 	;;	RDI - a
-biDelete:	push	r8
-		mov	rdi, [r8 + elem]
-		push	r8
+biDelete:	push	rdi
+		mov	rdi, [rdi + elem]
 		call	alligned_free
-		pop	r8
-		mov	rdi, r8
+		pop	rdi
 		call	alligned_free
-		pop	r8
 		ret
 	
 	;; void biPush(BigInt a, int v)
 	;; Add a new (oldest) digit in BigInt inner vector
 	;; TAKES:
 	;;	RDI - address of the bInt
-	;;	RSI - pushed value
+;;	RSI - pushed value
 	;; USES:
 	;;	R8 - size
 biPush:		push 	r8
@@ -501,7 +500,41 @@ biSubMod:	syspush
 		;;	RSI - BigInt b
 		;; RETURNS:
 		;;
-biAdd:		
+biAdd:		mov	rax, [rdi + sign]
+		cmp	rax, qword[rsi + sign]
+		jne 	.sub
+		push 	rax
+		call	biAddMod
+		pop	rax
+		mov	[rdi + sign], rax
+		ret
+.sub		call	biCmpMod
+		cmp	rax, 0
+		jl	.sub_rev
+		call 	biSubMod
+		ret
+
+.sub_rev	push	rdi
+		push	rsi
+		mov	rdi, 2
+		call	biInit
+		pop	rsi
+		mov	rdi, rax
+		call	biCopy
+		pop	rsi
+		call	biSubMod
+		mov	rcx, [rsi + elem]
+		mov	rax, [rdi + elem]
+		mov	[rsi + elem], rax
+		mov	rax, [rdi + limit]
+		mov	[rsi + limit], rax
+		mov	rax, [rdi + vsize]
+		mov	[rsi + vsize], rax
+		mov	rax, [rdi + sign]
+		mov	[rsi + sign], rax
+		mov	rdi, rcx
+		call	alligned_free
+		ret
 
 		;; Copy BigInt b to BigInt a
 		;; TAKES:
@@ -511,18 +544,72 @@ biAdd:
 		;;	
 biCopy		push	rdi
 		push	rsi
-		mov	rdi, [rdi + elem]
-		call	free
+		mov	rdi, [rsi + limit]
+		call	alligned_malloc
 		pop	rsi
 		pop	rdi
-		mov	rax, [rsi + elem]
-		mov	[rdi + elem], rax
+		mov	rdx, rax
+		push	rdx
+		push	rsi
+		push	rdi
+		mov	rdi, [rdi + elem]
+		call 	alligned_free
+		pop	rdi
+		pop	rsi
+		pop	rdx
 		mov	rax, [rsi + vsize]
 		mov	[rdi + vsize], rax
 		mov	rax, [rsi + limit]
 		mov	[rdi + limit], rax
 		mov	rax, [rsi + sign]
-		mov	[rsi + sign], rax		
+		mov	[rdi + sign], rax
+		mov	r8, rdx
+		mov	r9, [rsi + elem]
+		mov	rcx, [rsi + vsize]
+.loop		mov	rax, [r9]
+		mov	[r8], rax
+		add	r9, 8
+		add	r8, 8
+		dec	rcx
+		jnz	.loop
+		mov	[rdi + elem], rdx
+		ret
+		
+
+		;; void biMulSc(BigInt a, int k, int shift)
+		;; Muls a to k
+		;; TAKES:
+		;;	RDI - BigInt a
+		;;	RSI - int k; 0 < k < BASE
+		;;	RDX - int shift; < a.size
+		;; RETURNS:
+		;;	
+biMulSc:	syspush
+		mov	rcx, [rdi + vsize]
+		sub	rcx, rdx
+		mov	r8, [rdi + elem]
+		lea	r8, [r8 + rdx * 8]
+		mov	r9, BASE
+		xor	rax, rax
+		xor	rdx, rdx
+		xor	rbx, rbx
+
+.loop		mov	rax, [r8]
+		mul	rsi
+		add	rax, rbx
+		div	r9
+		mov	[r8], rdx 
+		mov	rbx, rax
+		xor	rdx, rdx
+		add	r8, 8
+		dec	rcx
+		jnz	.loop
+		
+		cmp	rbx, 0
+		je	.to_end	
+		mov	rsi, rbx
+		call	biPush
+.to_end		syspop
 		ret
 
 		;; void biToStringAsIs(BigInt src, char* buf)
@@ -607,6 +694,8 @@ biToString:	syspush
 		dec	rax
 		jnz	.loop_mid_0
 		jmp	.after_div
+
+
 		;; Returns sign of the BigInt
 		;; TAKES:
 		;;	RDI - BigInt a
@@ -667,6 +756,36 @@ biCmp:		mov	r8, [rdi + sign]
 .smaller	mov	rax, -1
 .to_ret		ret
 
+		;; Compares two BigInts modulo two
+		;; TAKES:
+		;;	RDI - BigInt a
+		;;	RSI - BigInt b
+		;; RETURNS:
+		;;	RAX - 0 if a == b; 1 if a > b; else -1
+
+biCmpMod:	mov	r8, [rdi + vsize]
+		mov	r9, [rsi + vsize]
+		cmp	r8, r9
+		jg	.bigger
+		jl	.smaller
+		mov	r8, [rdi + elem]
+		mov	r9, [rsi + elem]
+		mov	rcx, [rdi + vsize]
+.loop		mov	rax, [r8]
+		cmp	rax, qword[r9]
+		jg	.bigger
+		jl	.smaller
+		add	r8, 8
+		add	r9, 8
+		dec	rcx
+		cmp	rcx, 0
+		jg 	.loop
+		mov	rax, 0
+		jmp	.to_ret
+.bigger		mov	rax, 1
+		jmp	.to_ret
+.smaller	mov	rax, -1
+.to_ret		ret
 
 ;; %1 - where, %2 - how much, %3 - what TODO: fix this comment 
 	%macro casn 3

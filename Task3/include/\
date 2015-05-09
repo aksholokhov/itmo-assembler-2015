@@ -53,7 +53,7 @@ void biSub(BigInt dst, BigInt src);
 
 /** dst *= src */
 void biMul(BigInt dst, BigInt src);
-void biMulSc(BigInt dst, int k, int shift);
+void biMul(BigInt dst, int k);
 /** Compute quotient and remainder by divising numerator by denominator.
  *  quotient * denominator + remainder = numerator
  *

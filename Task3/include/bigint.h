@@ -42,6 +42,7 @@ void biDelete(BigInt bi);
  */
 int biSign(BigInt bi);
 
+void biAddMod(BigInt dst, BigInt src);
 /** dst += src */
 void biAdd(BigInt dst, BigInt src);
 

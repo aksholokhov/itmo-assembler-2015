@@ -771,17 +771,30 @@ biToString:	syspush
 		
 .to_module	mov	r8, 10
 		xor	rbx, rbx
-.get_new	mov	rax, [r10]	
-		cmp	rax, 0
-		je	.maybe_mid_0
+.get_new	mov	rax, [r10]			
+		mov	r9, DIG_LEN	
+		cmp	rcx, 1
+		jg	.div_loop
+		mov	r9, 0	
 .div_loop	xor 	rdx, rdx
 		div	r8
 		add	rdx, '0'
 		mov	[r11], dl
 		inc	r11
 		inc	rbx
+		dec	r9
 		cmp	rax, 0
 		jg	.div_loop
+		
+.zero_out	cmp	r9, 0
+		jle	.after_div
+		mov	rdx, '0'
+		mov	[r11], dl
+		inc	r11
+		inc	rbx
+		dec	r9
+		jmp	.zero_out
+
 .after_div	mov	byte[r11], ' '
 		inc	r11
 		inc	rbx

@@ -3,12 +3,12 @@
 #include <stdio.h>
 
 int main() {
-	char out[2048];
+	char out[10000];
 
 
-	BigInt a = biFromString("121726498776");
+	BigInt a = biFromString("-2");
 	BigInt amul = biFromString("98174981264");
-	BigInt b = biFromString("7432503025832049856073465073265020432923087450234509874358763052874309852304875632");
+	BigInt b = biFromString("-7432503025832049856073465073265020432923087450234509874358763052874309852304875632");
 	BigInt bmul = biFromString("2");
 	BigInt res = biFromString("1");
 
@@ -16,16 +16,18 @@ int main() {
 	BigInt b = biFromInt(1000000000);
 	
 	biSub(b, a);	
-
+*/
+	for (int i = 0; i < 300; i++) {
+		biMul(a, amul);
+	}
 	biToString(a, out, 1000000);
 	printf("%s \n", out);
 	printf("\n");
 
-
 	biToString(b, out, 1000000);
 	printf("%s \n", out);
-	printf("\n"); */
-	
+	printf("\n"); 
+/*
 	int k = 1000;
 	for (int i = 0; i < k; i++) {
 		biMul(a, b);;
@@ -34,7 +36,7 @@ int main() {
 		//printf("%s \n", out);
 		//printf("\n");
 	}
-
+*/
 /*	int k = 10000;
 	for (int i = 0; i < k; i++) {
 		printf("%d \n", i);

@@ -5,13 +5,6 @@ section .text
 	extern malloc
 	extern free
 
-	global biInit
-	global biPop
-	global biPush
-	global biEnl
-	global biToStringAsIs	;; outs inner array of bInt "as is" (for debugging) TODO: remove from global before submitting
-	global biAddMod		;; |a| + |b|, TODO: remove from global before submitting
-	global biSubMod
 	global biFromInt
 	global biFromString
 	global biToString
@@ -20,23 +13,22 @@ section .text
 	global biAdd
 	global biSub
 	global biMul
-	global biMulSc
 	global biCmp
-	global biCopy
+	global biDivRem
 
-TEN 	equ	10		;; It's ten, suddenly. 
-BASE	equ 	100000000 	;; Base of the scale of notation
-DIG_LEN	equ	8		;; Length of the one digit of number in chars
+TEN 	equ	10		;; Это десять (с). Используется в biFromString и biToString.
+BASE	equ 	100000000 	;; 10^8. Основание системы счисления.
+DIG_LEN	equ	8		;; Длина одного разряда в символах
 
-	struc	BigInt		;; BigInt struct
-sign:	resq	1		;; sign of the BigInt
-elem:	resq	1		;; elements of the inner vector
-vsize:	resq	1		;; number of the elements of the inner vector
-limit:	resq	1		;; size limit of the vector (the power of 2)
+	struc	BigInt		
+sign:	resq	1		;; Знак (1 если отрицательное, 0 если положительное)
+elem:	resq	1		;; Массив разрядов числа
+vsize:	resq	1		;; Размер вектора (количество реально существующих элементов)
+limit:	resq	1		;; Capacity вектора
 	endstruc
 
 
-	;; Push all system necessary regs	
+	;; Макрос для must save регистров	
 	%macro syspush 0
 		push	rbx
 		push	rbp
@@ -46,7 +38,7 @@ limit:	resq	1		;; size limit of the vector (the power of 2)
 		push	r15
 	%endmacro 
 
-	;; Pop all system necessary regs
+	;; The same
 	%macro syspop 0
 		pop	r15
 		pop	r14
@@ -57,11 +49,11 @@ limit:	resq	1		;; size limit of the vector (the power of 2)
 	%endmacro
 
 
-	;; Malloc with stack aligning by 16
+	;; Malloc, который проверяет выравнивание стека и, если надо, выравнивает
 	;; TAKES:
-	;;	RDI - size of the allocated memory
+	;;	RDI - необходимая память в байтах
 	;; RETURNS:
-	;;	RAx - allocated memory address
+	;;	RAx - саллоцированная память
 
 alligned_malloc:
 		test	rsp, 15
@@ -73,9 +65,9 @@ alligned_malloc:
 .malloc		call	malloc
 		ret
 
-	;; Free with stack aligning by 16
+	;; Free, с выравниванием
 	;; TAKES:
-	;;	RDI - address of the memory
+	;;	RDI - освобождаемая память
 
 alligned_free:
 		test	rsp, 15
@@ -86,41 +78,40 @@ alligned_free:
 		ret			
 .free		call	free
 		ret
-	;; Initialises a BigInt with initial inner
-	;; vector size of RDI
+
+
+	;; BigInt biInit(int64_t size)
+	;; Создает BigInt с начальным capacity внутреннего вектора равым 2^size
 	;; TAKES:
-	;;	RDI - initial vector size = 2^RDI
-	;; USES:
-	;;	RAX - address of allocated memory (bInt and vector)
-	;;	RDI - size of allocated memory
+	;;	RDI - начальный размер внутреннего вектор
 	;; RETURNS:
-	;;	RAX - new bInt
+	;;	RAX - новосозданный BigInt
 biInit:		syspush
-		push	r8
-		push	r9
+		push	r8			;; Сохраняем все необходимое перед
+		push	r9			;; вызовом внешних функций
 		push	rsi
 		push	rdx
 		mov	r8, rdi
-		mov	rdi, BigInt_size
-		push	r8
-		call 	alligned_malloc
+		mov	rdi, BigInt_size	
+		push	r8	
+		call 	alligned_malloc		;; Создаем структуру BigIntа
 		pop	r8
 		mov	r9, 1
-.loop		shl	r9, 1
-		dec	r8
-		jnz	.loop
-		mov	qword [rax + sign], 0
-		mov	qword [rax + vsize], 0
+.loop		shl	r9, 1			;; Считаем размер внутреннего вектора
+		dec	r8			;; size = 2^r8
+		jnz	.loop			
+		mov	qword [rax + sign], 0	;; Инициализируем поля BigIntа дефолтными
+		mov	qword [rax + vsize], 0	;; значениями (положительный, путой)
 		mov	qword [rax + limit], r9
 		mov	rdi, r9
-		shl	rdi, 3
+		shl	rdi, 3			;; Считаем размер внутреннего вектора в байтах
 		mov	r9, rax
 		push	r9
-		call	alligned_malloc
+		call	alligned_malloc		;; Выделяем память под внутренний вектор
 		pop	r9
-		mov	[r9 + elem], rax
+		mov	[r9 + elem], rax	
 		mov	r8, [r9 + limit]
-.loop2		mov	qword[rax], 0
+.loop2		mov	qword[rax], 0		;; Зануляем внутренный вектор
 		add	rax, 8
 		dec	r8
 		jnz	.loop2
@@ -133,9 +124,9 @@ biInit:		syspush
 		ret
 
 	;; void biDelete(BigInt a);
-	;; Delete the BigInt a with his inner vector
+	;; Удаляет BigInt с его внутренним вектором
 	;; TAKES:
-	;;	RDI - a
+	;;	RDI - BigInt a (удаляемый)
 biDelete:	push	rdi
 		mov	rdi, [rdi + elem]
 		call	alligned_free
@@ -143,22 +134,21 @@ biDelete:	push	rdi
 		call	alligned_free
 		ret
 	
+
 	;; void biPush(BigInt a, int v)
-	;; Add a new (oldest) digit in BigInt inner vector
+	;; Добавляет новый (старший) разряд в BigInt
 	;; TAKES:
-	;;	RDI - address of the bInt
-;;	RSI - pushed value
+	;;	RDI - BigInt a
+	;;	RSI - int v - помещаемое значение
 	;; USES:
 	;;	R8 - size
 biPush:		push 	r8
 		push	r9
-		mov	r8, [rdi + vsize]
-		mov	r9, [rdi + limit]
-		cmp	r8, r9
-		jl	.after
-		;push	rdi
-		call	biEnl
-		;pop	rdi
+		mov	r8, [rdi + vsize]		;; Смотрим, поместится ли
+		mov	r9, [rdi + limit]		;; еще один разряд во внутренний
+		cmp	r8, r9				;; вектор BigInta,
+		jl	.after				;;
+		call	biEnl				;; и если нет, то расширяем
 .after		mov	r9, [rdi + elem]
 		lea	r9, [r9 + r8 * 8]
 		mov	[r9], rsi
@@ -169,9 +159,9 @@ biPush:		push 	r8
 		ret
 
 	;; void biEnl(BigInt a)
-	;; Enlarges inner vector of bInt in 2 times
-	;; TAKES
-	;;	RDI - address of bInt
+	;; Увеличивает capacity внутреннего вектора BigInta в два раза
+	;; TAKES:
+	;;	RDI - расширяемый BigInt
 biEnl: 		syspush
 		push	r8
 		push	r9
@@ -183,27 +173,27 @@ biEnl: 		syspush
 
 		mov	rsi, rdi
 		mov	rdi, [rsi + limit]
-		shl	rdi, 4
+		shl	rdi, 4				;; Подсчитываем размер нового вектора
 		push	rsi
 		push	rdi
-		call	alligned_malloc
+		call	alligned_malloc			;; Выделяем память под вектор
 		pop	rdi
 		pop	rsi
-		shr	rdi, 3
-		mov	[rsi + limit], rdi
+		shr	rdi, 3			
+		mov	[rsi + limit], rdi		;; Сохраняем новое значение capacity
 		mov	r8, [rsi + elem]
 		mov	r10, [rsi + vsize]	
 		mov	r9, rax
-.enl_loop	mov	rdi, [r8]
-		mov	[r9], rdi
+.enl_loop	mov	rdi, [r8]			;; Копируем содержимое старого внутреннего
+		mov	[r9], rdi			;; вектора в новый
 		add	r8, 8
 		add	r9, 8
 		dec	r10
 		jnz	.enl_loop
-		mov	rdi, [rsi + elem]
-		mov	[rsi + elem], rax
-		push	rsi
-		call	free
+		mov	rdi, [rsi + elem]		
+		mov	[rsi + elem], rax		;; Помещаем новый вектор на место старого
+		push	rsi				
+		call	free				;; Удаляем старый вектор
 		pop	rsi
 		mov	rdi, rsi
 		
@@ -218,11 +208,11 @@ biEnl: 		syspush
 		ret
 
 		;; int biPop(BigInt a)
-		;; makes "pop" from the inner BigInt vector to the V
+		;; Возвращает старший разряд BigInta (на практике используется для его удаления)
 		;; TAKES:
-		;;	rdi - bInt
+		;;	RDI - BigIn a
 		;; RETURNS:
-		;;	rax - v with the head of the vector if it's size > 0 or 0 if not
+		;;	RAX - верхний разряд числа (из вектора он удаляется). Если вектор путой - возвращает -1.
 biPop 		mov	r8, [rdi + vsize]
 		cmp	r8, 0
 		jne	.to_pop
@@ -237,14 +227,11 @@ biPop 		mov	r8, [rdi + vsize]
 
 
 		;; int biHead(BigInt a)
-		;; returns a head of the inner vector
+		;; Возвращает верхний разряд числа, не удаляя его из вектора
 		;; TAKES:
 		;;	RDI - BigInt a
 		;; RETURNS:
-		;;	RAX - the value in the head of the vector
-		;; USES:
-		;;	R8 - pointer to the elements
-		;;	R9 - size of the vector
+		;;	RAX - Верхний разряд числа
 biHead		mov	r8, [rdi + elem]
 		mov	r9, [rdi + vsize]
 		dec	r9
@@ -252,27 +239,24 @@ biHead		mov	r8, [rdi + elem]
 		mov	rax, [r8]
 		ret
 
-		;; Creates bInt from int
+		;; BigInt biFromInt(int64_t a)
+		;; Конструктор BigInta от int64_t
 		;; TAKES:
-		;;	RDI - integer - initial value of bInt
+		;;	RDI - начальное значение BigIntа
 		;; RETURNS:
-		;;	RAX - poiner to the created bInt
-		;; USES:
-		;;	R8 - pointer to the new bInt
-		;;	R9 - initial value
-
+		;;	RAX - новосозданный BigInt
 biFromInt:	push	rdi
 		mov	rdi, 1
-		call	biInit
+		call	biInit			;; Создаем пустой BigInt
 		pop	rdi
-		cmp	rdi, 0
+		cmp	rdi, 0			;; Определяем знак
 		jge	.after_sign	
-		mov	qword[rax + sign], 1
+		mov	qword[rax + sign], 1	
 		neg	rdi
 .after_sign	xchg	rdi, rax
 		mov	rcx, BASE
 
-.loop		xor 	rdx, rdx
+.loop		xor 	rdx, rdx		;; Делим Int на BASE и помещаем разряды в BigInt, пока не 0.
 		div	rcx
 		mov	rsi, rdx
 		push	rax
@@ -287,12 +271,11 @@ biFromInt:	push	rdi
 		ret
 
 		;; BigInt biFromString(char const* s);
-		;; Creates BigInt from the given string
+		;; Конструктор BigInta от строки
 		;; TAKES:
-		;;	RDI - string
+		;;	RDI - строка с начальным значение BigInta 
 		;; RETURNS:
-		;;	RAX - created BigInt
-
+		;;	RAX - новосозданный BigInt
 biFromString:	syspush
 		push	rdx
 		push	rcx
@@ -301,32 +284,35 @@ biFromString:	syspush
 		push	r10
 
 		mov	rdx, rdi
-		mov	rdi, 1		; let initial length limit of the big int be 2 digits (2^rdi)
-		call	biInit		; Create new empty BigInt
-		cmp	byte[rdx], '-'	; if first sign isn't '-'
-		jne	.not_minus	; skip the change of the sign	
-		mov	qword[rax + sign], 1	; else change it
-		inc	rdx		; and go to the next character
+		mov	rdi, 1			;;
+		call	biInit			;; Создаем пустой BigInt
+		cmp	byte[rdx], '-'		;; Определяем знак: если первый символ - минус, то число отрицательное
+		jne	.not_minus			
+		mov	qword[rax + sign], 1
+		inc	rdx			
 
-.not_minus	xor	rcx, rcx	; clear the counter 
-.correct_check	cmp	byte[rdx], '9'	; If the character is bigger than 9
-		jg	.fail		; and less than 0, it's not a digit, 
-		cmp	byte[rdx], '0'	; so we have incorrect string and
-		jl	.fail		; go to the .fail block.
-		inc	rdx		; After this cycle we'll have the smallest digit of the number in rdx
-		inc	rcx		; and the length of the number in rcx
+.not_minus	xor	rcx, rcx		;; Проверяем строку на корректность: если последовательность состоит не только из цифр, то строка некорректна
+.correct_check	cmp	byte[rdx], '9'	
+		jg	.fail	 
+		cmp	byte[rdx], '0'	
+		jl	.fail		
+		inc	rdx		
+		inc	rcx		
 		cmp	byte[rdx], 0
 		jne	.correct_check
 		cmp	rcx, 0
-		je	.fail		; if the size is 0 it's incorrect string
-		dec	rdx		; String pointer to the last symbol
-		
-		mov	rbp, rdx	; Save pointer to rbp
-		mov	rdi, rax	; BigInt to rdi: first arg for biPush
+		je	.fail	
+		dec	rdx		
+
+	;; Перевод строки в число. Общий алгоритм: считываем по 8 символов из строки,
+	;; формируем из них очередной разряд числа, после этого помещаем число во
+	;; внутренний вектор BigInta. Начинаем с младшего разряда. И так пока строка не кончится.
+		mov	rbp, rdx	
+		mov	rdi, rax	
 		mov	r8, TEN		
-.loop_by_8	mov	r10, 1		; Multiplier-accumulator
-		xor	rsi, rsi	; New number for vector: second arg 
-		xor	rax, rax	; clear for mul op-s
+.loop_by_8	mov	r10, 1		
+		xor	rsi, rsi	
+		xor	rax, rax	
 		mov	r9, DIG_LEN	
 		cmp	rcx, DIG_LEN	
 		jge	.loop_by_1
@@ -345,20 +331,20 @@ biFromString:	syspush
 		dec	r9
 		jnz	.loop_by_1
 		push	rcx
-		call	biPush		; TODO: potentially bugs
+		call	biPush		
 		pop	rcx	
 .after_push	cmp	rcx, 0
 		jg	.loop_by_8
 		
-.clr_zeroes	call 	biHead
+.clr_zeroes	call 	biHead			;; Избавляемся от лидирующих нулей во внутреннем векторе
 		cmp	rax, 0
 		jne	.to_zero_sign
 		call	biPop
 		jmp	.clr_zeroes	
 		
-.to_zero_sign	cmp	qword[rdi + vsize], 0
+.to_zero_sign	cmp	qword[rdi + vsize], 0	;; Если вектор так и остался пустым - мы считали 0
 		jne	.to_ret
-		mov	qword[rdi + sign], 0
+		mov	qword[rdi + sign], 0	;; знак нуля - 0. (это обработка случая biFromString("-0")
 
 .to_ret		mov	rax, rdi
 		pop	r10
@@ -369,7 +355,7 @@ biFromString:	syspush
 		syspop
 		ret
 
-.fail		mov 	rax, 0
+.fail		mov 	rax, 0			;; Если строка некорректна - возвращаем NULL
 		pop	r10
 		pop	r9
 		pop	r8
@@ -380,12 +366,10 @@ biFromString:	syspush
 					
 
 		;; void biAddMod(BigInt dst, BigInt src)
-		;; dst += scr as modulo 
+		;; Сложение двух чисел по модулю (DST += STC). Сохраняет знак DST.
 		;; TAKES:
 		;;	RDI - dst
 		;;	RSI - src
-		;; USES:
-		;;	
 		;; RETURNS:
 		;;	RDI - dst + src
 
@@ -393,18 +377,18 @@ biAddMod:	syspush
 		push	rdi
 		push	rsi
 		mov	rdi, 2
-		call 	biInit
+		call 	biInit			;; Создаем пустой BigInt	
 		pop	rsi
 		pop	rdi
-		xor	r13, r13 	;clear "swap RDI RSI"	flag
-		mov	r9, [rdi + vsize]
+		xor	r13, r13	 	
+		mov	r9, [rdi + vsize]	;; Определяем какое из чисел длиньше своим вектором
 		mov	r10, [rsi + vsize]
 		cmp	r9, r10
 		jle	.counting
-		xchg	r9, r10
-		xchg	rdi, rsi
-		mov	r13, 1
-.counting	mov	rcx, r9
+		xchg	r9, r10			;; Если RDI < RSI - меняем их местами
+		xchg	rdi, rsi	
+		mov	r13, 1			;; Флаг, что мы меняли местами числа
+.counting	mov	rcx, r9			;; Подготовка к сложению: настраиваем флаги, указатели, итераторы, счетчики
 		mov	r9, [rdi + elem]
 		mov	r10, [rsi + elem]
 		mov	r11, rdi
@@ -413,19 +397,19 @@ biAddMod:	syspush
 		mov	r14, BASE
 		xor	rax, rax
 		xor	rdx, rdx
-.loop		add	rax, [r9]
+.loop		add	rax, [r9]		;; Складываем два разряда
 		add	rax, [r10]
-		div	r14		
-		mov	rsi, rdx
-		call 	biPush
-		xor 	rdx, rdx
+		div	r14			;; Делим на базу
+		mov	rsi, rdx		
+		call 	biPush			;; помещаем в новый разряд что вместилось
+		xor 	rdx, rdx		;; а что не вместилось - останется в rax как перенос на следующий разряд
 		add	r9, 8
 		add	r10, 8
 		dec	rcx
 		jnz	.loop
 		
-		mov	rcx, [r12 + vsize]
-		sub	rcx, [r11 + vsize]
+		mov	rcx, [r12 + vsize]	;; Если одно число имело больший разряд чем другое -
+		sub	rcx, [r11 + vsize]	;; Переносим эти разряды в новое число с учетом переполнения
 		jz	.last_digit
 
 .loop2		add	rax, [r10]
@@ -437,10 +421,10 @@ biAddMod:	syspush
 		dec	rcx
 		jnz	.loop2	
 
-.last_digit	cmp	rax, 0
+.last_digit	cmp	rax, 0			;; Смотрим, не переполнились ли мы в последнем сложении
 		je	.to_end
 		mov	rsi, rax
-		call 	biPush
+		call 	biPush			;; если да - добавляем новый разряд
 
 .to_end		cmp	r13, 0
 		je	.end
@@ -456,42 +440,37 @@ biAddMod:	syspush
 
 
 		;; void biSubMod(BigInt dst, BigInt src)
-		;; dst -= scr as modulo 
+		;; Вычитает SRC из DST. DST должен быть больше SRC (обеспечивается вызывающими функциями, сама функция глобальной не является)
 		;; TAKES:
-		;;	RDI - dst (must be bigger than src or equal)
+		;;	RDI - dst 
 		;;	RSI - src
-		;; USES:
-		;;	
-		;; RETURNS:
-		;;	RDI - dst - src
-
 biSubMod:	syspush
-		mov	rcx, [rsi + vsize]
+		mov	rcx, [rsi + vsize]		;; Настраиваем итераторы и счетчик перед циклом
 		mov	r9, [rdi + elem]
 		mov	r10, [rsi + elem]
 		xor	rax, rax
 		xor	rdx, rdx
 
-.loop		add	rax, [r9]
+.loop		add	rax, [r9]			;; отнимаем от одного разряда другой соответствующий ему
 		sub	rax, [r10]
-		jns	.ins_plus		
-		add	rax, BASE
-		mov	[r9], rax
-		mov	rax, -1
+		jns	.ins_plus			;; если не переполнилось - помещаем назад как есть
+		add	rax, BASE			;; если переполнилось, то 
+		mov	[r9], rax			;; помещаем, прибавив базу
+		mov	rax, -1				;; и оставляем перенос в rax для следующей итерации
 		add	r9, 8
 		add	r10, 8
 		dec	rcx
 		jnz	.loop
 		jmp	.to_loop2		
-.ins_plus	mov	[r9], rax
+.ins_plus	mov	[r9], rax			
 		xor	rax, rax
 		add	r9, 8
 		add	r10, 8
 		dec	rcx
 		jnz	.loop
 		
-.to_loop2	mov	rcx, [rdi + vsize]
-		sub	rcx, [rsi + vsize]
+.to_loop2	mov	rcx, [rdi + vsize]		;; По аналогии со сложением: если одно число длиньше другого,
+		sub	rcx, [rsi + vsize]		;; то проходимся по остатку числа с учетом переноса
 		jz	.to_end
 
 .loop2		add	rax, [r9]
@@ -508,7 +487,7 @@ biSubMod:	syspush
 		dec	rcx
 		jnz	.loop2		
 
-.to_end		sub	r9, 8
+.to_end		sub	r9, 8				;; Удаляем лидирующие нули
 		cmp	qword[r9], 0
 		jne	.end
 		call	biPop
@@ -516,7 +495,7 @@ biSubMod:	syspush
 		ret
 
 		;; void biSub(BigInt a, BigInt b)
-		;; a -= b (according to the sign)
+		;; Вычитает из первого числа второе. 
 		;; TAKES:
 		;;	RDI - BigInt a
 		;; 	RSI - BigInt b
@@ -526,35 +505,33 @@ biSub:		xor	qword[rsi + sign], 1
 		ret
 
 		;; void biAdd(BigInt a, BigInt b);
-		;; a += b (according to the sign);
+		;; Складывает два числа учитывая знак
 		;; TAKES:
 		;;	RDI - BigInt a
 		;;	RSI - BigInt b
-		;; RETURNS:
-		;;
 biAdd:		mov	rax, [rdi + sign]
-		cmp	rax, qword[rsi + sign]
+		cmp	rax, qword[rsi + sign] 	;; если числа разного знака - отнимем одно от другого.
 		jne 	.sub
 		push 	rax
-		call	biAddMod
+		call	biAddMod		;; иначе - сложим
 		pop	rax
 		mov	[rdi + sign], rax
 		ret
-.sub		call	biCmpMod
+.sub		call	biCmpMod		;; Если a больше по модулю чем b - отнимаем как есть
 		cmp	rax, 0
-		jl	.sub_rev
+		jl	.sub_rev		;; Иначе - меняем местами
 		call 	biSubMod
 		ret
 
-.sub_rev	push	rdi
+.sub_rev	push	rdi		
 		push	rsi
 		mov	rdi, 2
-		call	biInit
+		call	biInit			;; т.к. мы обязаны сохранять второй аргумент в том же виде, делаем его копию
 		pop	rsi
 		mov	rdi, rax
 		call	biCopy
 		pop	rsi
-		call	biSubMod
+		call	biSubMod		
 		mov	rcx, [rsi + elem]
 		mov	rax, [rdi + elem]
 		mov	[rsi + elem], rax
@@ -565,20 +542,19 @@ biAdd:		mov	rax, [rdi + sign]
 		mov	rax, [rdi + sign]
 		mov	[rsi + sign], rax
 		mov	rdi, rcx
-		call	alligned_free
+		call	alligned_free		;; удаляем раннее нами созданный вспомогательный BigInt
 		ret
 
-		;; Copy BigInt b to BigInt a
+		;; void biCopy(BigInt dst, BigInt src)
+		;; Копирует src в dst
 		;; TAKES:
-		;;	RDI - BigInt a
-		;;	RSI - BigInt b
-		;; RETURNS:
-		;;	
+		;;	RDI - BigInt dst
+		;;	RSI - BigInt src
 biCopy		push	rdi
 		push	rsi
 		mov	rdi, [rsi + limit]
 		shl	rdi, 3
-		call	alligned_malloc
+		call	alligned_malloc			;; создаем новый вектор такого же размера, как внуренний вектор src
 		pop	rsi
 		pop	rdi
 		mov	rdx, rax
@@ -586,11 +562,11 @@ biCopy		push	rdi
 		push	rsi
 		push	rdi
 		mov	rdi, [rdi + elem]
-		call 	alligned_free
+		call 	alligned_free			;; удаляем старый вектор dst
 		pop	rdi
 		pop	rsi
 		pop	rdx
-		mov	rax, [rsi + vsize]
+		mov	rax, [rsi + vsize]		;; переносим все (кроме вектора) поля из src в dst
 		mov	[rdi + vsize], rax
 		mov	rax, [rsi + limit]
 		mov	[rdi + limit], rax
@@ -599,24 +575,22 @@ biCopy		push	rdi
 		mov	r8, rdx
 		mov	r9, [rsi + elem]
 		mov	rcx, [rsi + vsize]
-.loop		mov	rax, [r9]
+.loop		mov	rax, [r9]			;; копируем содержимое вектора src в новосозданный вектор
 		mov	[r8], rax
 		add	r9, 8
 		add	r8, 8
 		dec	rcx
 		jnz	.loop
-		mov	[rdi + elem], rdx
+		mov	[rdi + elem], rdx		;; помещаем новый вектор как внутренний вектор dst
 		ret
 		
 
 		;; void biMulSc(BigInt a, int k, int shift)
-		;; Muls a to k
+		;; Скалярный Mul. Умножает BigInt a на Int k. Использовался в предыдущей версии biMul. Сейчас не используется, посему не прокомментированно.
 		;; TAKES:
 		;;	RDI - BigInt a
 		;;	RSI - int k; 0 < k < BASE
 		;;	RDX - int shift; < a.size
-		;; RETURNS:
-		;;	
 biMulSc:	syspush
 		mov	rcx, [rdi + vsize]
 		sub	rcx, rdx
@@ -645,33 +619,31 @@ biMulSc:	syspush
 .to_end		syspop
 		ret
 
-		;; void BiMul(BigInt a, BigInt b);
+		;; void BiMul(BigInt dst, BigInt src);
+		;; Умножает dst на BigInt src (dst *= src)
 		;; TAKES:
-		;;	RDI - BigInt a
-		;;	RSI - BigInt b
-		;; RETURNS:
-		;;	
+		;;	RDI - BigInt dst
+		;;	RSI - BigInt src
 biMul:		syspush
 		mov	r8, 0
-		cmp	rdi, rsi
-		jne	.to_size
-		push	rdi
+		cmp	rdi, rsi		;; Проверяем, не ссылаются ли dst и src на один и тот жее BigInt
+		jne	.to_size		;; если они разные - работаем как есть
+		push	rdi			;; если нет - копируем.
 		mov	rdi, 1
-		call	biInit
+		call	biInit			;; создаем пустой BigInt
 		pop	rsi
 		mov	rdi, rax
-		call	biCopy	
+		call	biCopy			;; копируем туда src
 		xchg	rdi, rsi
-		mov	r8, 1
+		mov	r8, 1			;; поднимаем флаг, что мы создали фиктивный BigInt
 		push	rsi
 
-.to_size	push	r8
+.to_size	push	r8			;; Сохраняем флаг
 		mov	rax, [rdi + vsize]
 		add	rax, [rsi + vsize]
-		;inc	rax
-		push	rax
+		push	rax			;; Считаем максимальный размер результата (сумма размеров исходных чисел) и сохраняем его
 		xor	rcx, rcx
-.lencount	inc	rcx
+.lencount	inc	rcx			;; Берем логарифм по основанию 2 от длинны (для вызова конструктора)
 		shr	rax, 1
 		jnz	.lencount
 		inc	rcx
@@ -679,27 +651,28 @@ biMul:		syspush
 		push	rsi
 		push	rdi
 		mov	rdi, rcx
-		call	biInit
+		call	biInit			;; Создаем BigInt под результат
 		pop	rdi
 		pop	rsi
 		mov	r10, rax		
 		pop	rax
 		mov	[r10 + vsize], rax		
 
-		mov	r8, [rdi + sign]
+		mov	r8, [rdi + sign]	;; Определяем знак результата
 		xor	r8, [rsi + sign]
 		mov	[r10 + sign], r8
 
-		xor 	rax, rax
+		xor 	rax, rax		;; Настраиваем итераторы, счетчики и константы
 		xor	rdx, rdx
 		mov	r13, BASE
 		mov	r8, [rdi + vsize]
 		mov	r9, [rdi + vsize]
-		
+	
+	;; Вычисляем результат используя алгоритм быстрого перемноженя двух длинных чисел
 		mov	r11, 0	
 .loop1		mov	r12, 0
 		xor	rcx, rcx
-
+					
 .loop2		mov	r14, [rdi + elem]
 		mov	rax, [r14 + r11*8]
 		mov	r14, [rsi + elem]
@@ -726,44 +699,42 @@ biMul:		syspush
 
 		push	rdi
 		mov	rdi, r10		
-.clr_zeroes	call	biHead
+.clr_zeroes	call	biHead				;; Удаляем лидирующие нули
 		cmp	rax, 0
 		jne	.to_copy
 		call	biPop
 		jmp	.clr_zeroes	
 	
-.to_copy	mov	rsi, rdi
+.to_copy	mov	rsi, rdi			;; Копируем в DST результат вычислений
 		pop	rdi
 		push	rsi
 		call	biCopy
 		pop	rdi
-		call	biDelete
+		call	biDelete			;; Удаляем BigInt, в котором считали результат
 		
-		pop	r8
-		cmp	r8, 1
+		pop	r8				;; Воскрешаем флаг
+		cmp	r8, 1				;; Смотрим, создавали ли мы фиктивный BigInt (случай biMul(a, a))
 		jne	.to_ret
-		pop	rdi
-		call	biDelete
+		pop	rdi			
+		call	biDelete			;; Если да, то удаляем его
 .to_ret		syspop	
 		ret
 
 
 		;; void biToStringAsIs(BigInt src, char* buf)
-		;; Outs bInt inner vector "as is". I used it for debugging
+		;; Выводит BigInt как строку в buf.
 		;; TAKES:
-		;;	RDI - source bInt
-		;;	RSI - output buffer
-		;;	RDX - limit
-		;; RETURNS:
-		;;	RSI - output buffer with BigInt
+		;;	RDI - BigInt src
+		;;	RSI - выходной буфер buf
+		;;	RDX - лимит на число выводимых знаков (с учетом минуса, если он есть)
 biToString:	syspush
 		push	rdi
 		push 	rsi
 		push	rdx
-		mov	rdi, [rdi + vsize]
-		inc	rdi
-		shl	rdi, 4
-		call	alligned_malloc
+		mov	rdi, [rdi + vsize]		;; Хоть у нас и хранятся числа в десячином виде по 8 разрядов,	
+		inc	rdi				;; если мы будем выводить как есть, то получим обратную запись.
+		shl	rdi, 4				;; Поэтому нам необходим промежуточный буфер,
+		call	alligned_malloc			;; который мы и создаем.
 		pop	rdx
 		pop	rsi
 		pop	rdi
@@ -771,17 +742,17 @@ biToString:	syspush
 		push	rsi
 		push	rax
 		push 	rdx
-		mov	rcx, [rdi + vsize]
-		mov	r10, [rdi + elem]
+		mov	rcx, [rdi + vsize]		;; Настраиваем счетчик
+		mov	r10, [rdi + elem]		;; Настраиваем итератор
 		
-.to_module	mov	r8, 10
+.to_module	mov	r8, 10				;; Настраиваем константы
 		xor	rbx, rbx
 .get_new	mov	rax, [r10]			
 		mov	r9, DIG_LEN	
 		cmp	rcx, 1
 		jg	.div_loop
 		mov	r9, 0	
-.div_loop	xor 	rdx, rdx
+.div_loop	xor 	rdx, rdx			;; Выводим посимвольно каждый разряд в буфер
 		div	r8
 		add	rdx, '0'
 		mov	[r11], dl
@@ -791,7 +762,7 @@ biToString:	syspush
 		cmp	rax, 0
 		jg	.div_loop
 		
-.zero_out	cmp	r9, 0
+.zero_out	cmp	r9, 0				;; Если в очередном разряде меньше символов, чем надо (лидирующие нули), то выводим нули до DIG_LEN
 		jle	.after_div
 		mov	rdx, '0'
 		mov	[r11], dl
@@ -800,24 +771,24 @@ biToString:	syspush
 		dec	r9
 		jmp	.zero_out
 
-.after_div	add	r10, 8
+.after_div	add	r10, 8				;; Проверяем, дошли до конца или нет, и если нет - берем новый разряд
 		dec	rcx
 		cmp	rcx, 0
 		jg	.get_new
 
-		cmp	qword[rdi + sign], 1
+		cmp	qword[rdi + sign], 1		;; если число отрицательное - выводим '-'
 		jne	.to_rev_out	
 		mov	byte [r11], '-'
 		inc	r11
 		inc	rbx		
 		
-.to_rev_out	dec	r11
+.to_rev_out	dec	r11				;; сравниваем limit и длинну числа. Берем то, что меньше и выводим ровно столько символов
 		pop	rdx
 		cmp	rbx, rdx
 		jle	.reverse_loop
 		xchg	rbx, rdx
 		
-.reverse_loop	cmp	rbx, 0
+.reverse_loop	cmp	rbx, 0				;; проходимся по промежуточному буферу в обратном порядке и копируем посимвольно в buf.
 		jle	.to_end
 		mov	al, byte[r11]
 		mov	[rsi], al
@@ -828,14 +799,15 @@ biToString:	syspush
 
 .to_end		mov	byte[rsi], 0
 		pop	rdi
-		call 	alligned_free
+		call 	alligned_free			;; удаляем промежуточный буфер
 		pop	rsi
 		mov	al, byte[rsi]
 		syspop	
 		ret		
 
 
-		;; Returns sign of the BigInt
+		;; Int biSign(BigInt a)
+		;; Возвращает знак числа
 		;; TAKES:
 		;;	RDI - BigInt a
 		;; RETURNS:
@@ -860,35 +832,37 @@ biSign:		mov	rax, [rdi + sign]
 .to_ret		ret
 
 
-		;; Compares two BigInts
+		;; int biCmp(BigInt a, BigInt b)
 		;; TAKES:
 		;;	RDI - BigInt a
 		;;	RSI - BigInt b
 		;; RETURNS:
 		;;	RAX - 0 if a == b; 1 if a > b; else -1
-biCmp:		mov	r8, [rdi + sign]
-		mov	r9, [rsi + sign]
+biCmp:		mov	r8, [rdi + sign]		;; сравниваем знаки чисел. Если разные - выводим ответ
+		mov	r9, [rsi + sign]		
 		cmp	r8, r9
 		jg	.smaller
 		jl	.bigger
-		mov	r8, [rdi + vsize]
+		mov	r8, [rdi + vsize]		;; сравниваем размеры векторов чисел. Если разные - выводим ответ.
 		mov	r9, [rsi + vsize]
 		cmp	r8, r9
 		jg	.bigger
 		jl	.smaller
-		mov	r8, [rdi + elem]
-		mov	r9, [rsi + elem]
 		mov	rcx, [rdi + vsize]
-.loop		mov	rax, [r8]
+		mov	r8, [rdi + elem]		;; Проходимся по вектору числа от старших разрядов к младшим
+		mov	r9, [rsi + elem]		;; если находим разные разряды - выводим ответ
+		lea	r8, [r8 + 8 * rcx]
+		lea	r9, [r9 + 8 * rcx]
+.loop		sub	r8, 8
+		sub	r9, 8
+		mov	rax, [r8]
 		cmp	rax, qword[r9]
 		jg	.bigger
 		jl	.smaller
-		add	r8, 8
-		add	r9, 8
 		dec	rcx
 		cmp	rcx, 0
 		jg 	.loop
-		mov	rax, 0
+		mov	rax, 0				;; Если мы оказались здесь - числа равны
 		jmp	.to_ret
 .bigger		mov	rax, 1
 		jmp	.to_ret
@@ -899,45 +873,39 @@ biCmp:		mov	r8, [rdi + sign]
 biDivRem:	mov	rax, 0
 		ret
 
-		;; Compares two BigInts modulo two
+		;; int biCmpMod(BigInt a, BigInt b)
+		;; Сравнивает два числа по модулю. То же самое, что biCmp, но без учета знака
 		;; TAKES:
 		;;	RDI - BigInt a
 		;;	RSI - BigInt b
 		;; RETURNS:
 		;;	RAX - 0 if a == b; 1 if a > b; else -1
-
-biCmpMod:	mov	r8, [rdi + vsize]
+biCmpMod:	mov	r8, [rdi + vsize]		;; сравниваем размеры векторов чисел. Если разные - выводим ответ.
 		mov	r9, [rsi + vsize]
 		cmp	r8, r9
 		jg	.bigger
 		jl	.smaller
-		mov	r8, [rdi + elem]
-		mov	r9, [rsi + elem]
 		mov	rcx, [rdi + vsize]
-.loop		mov	rax, [r8]
+		mov	r8, [rdi + elem]		;; Проходимся по вектору числа от старших разрядов к младшим
+		mov	r9, [rsi + elem]		;; если находим разные разряды - выводим ответ
+		lea	r8, [r8 + 8 * rcx]
+		lea	r9, [r9 + 8 * rcx]
+.loop		sub	r8, 8
+		sub	r9, 8
+		mov	rax, [r8]
 		cmp	rax, qword[r9]
 		jg	.bigger
 		jl	.smaller
-		add	r8, 8
-		add	r9, 8
 		dec	rcx
 		cmp	rcx, 0
 		jg 	.loop
-		mov	rax, 0
+		mov	rax, 0				;; Если мы оказались здесь - числа равны
 		jmp	.to_ret
 .bigger		mov	rax, 1
 		jmp	.to_ret
 .smaller	mov	rax, -1
 .to_ret		ret
 
-;; %1 - where, %2 - how much, %3 - what TODO: fix this comment 
-	%macro casn 3
-		mov rdi, %1
-		mov rcx, %2
-		mov eax, %3
-		cld
-		rep stosd
-	%endmacro
 	
 
 	

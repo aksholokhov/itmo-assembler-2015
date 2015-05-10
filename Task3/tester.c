@@ -5,23 +5,37 @@
 int main() {
 	char out[2048];
 //	char a_str[256] = "123456";
-	BigInt a = biFromString("44444213421424");
-	BigInt amul = biFromString("44444213421424");
+	BigInt a = biFromString("200000002");
+	BigInt amul = biFromString("200000002");
 	BigInt c = biFromString("12434543657645745764564534");
 	BigInt cmul = biFromString("12434543657645745764564534");
-	
-	int k = 5;
-	for (int i = 0; i < k; i++) {
-		biMul(amul, a);
-		biMul(cmul, c);
-	//	printf("cycle: %d \n", i);
-	}
-	//printf("after cycle");
-	biMul(amul, cmul);
-	
+/*
+	biToString(a, out, 1000000);
+	printf("%s \n", out);
+	printf("\n");
+
+
 	biToString(amul, out, 1000000);
 	printf("%s \n", out);
 	printf("\n");
+*/
+
+	int k = 700;
+	for (int i = 0; i < k; i++) {
+		biMul(amul, a);
+		/*printf("cycle: %d \n", i);
+		biToString(amul, out, 1000000);
+		printf("%s \n", out);*/
+		printf("%d \n", i);
+	}
+//	printf("after cycle");
+	
+//	biToString(amul, out, 1000000);
+//	printf("%s \n", out);
+	printf("OK \n");
+
+
+
 /*	biCopy(amul, a);
 	biMul(amul, c);
 	biCopy(cmul, amul);

@@ -626,6 +626,7 @@ biMulSc:	syspush
 biMul:		syspush
 		mov	rax, [rdi + vsize]
 		add	rax, [rsi + vsize]
+		;inc	rax
 		push	rax
 		xor	rcx, rcx
 .lencount	inc	rcx
@@ -643,53 +644,54 @@ biMul:		syspush
 		pop	rax
 		mov	[r10 + vsize], rax		
 
+		mov	r8, [rdi + sign]
+		xor	r8, [rsi + sign]
+		mov	[r10 + sign], r8
+
 		xor 	rax, rax
 		xor	rdx, rdx
-		mov	r8, [rdi + elem]
 		mov	r13, BASE
+		mov	r8, [rdi + vsize]
+		mov	r9, [rdi + vsize]
+		
 		mov	r11, 0	
 .loop1		mov	r12, 0
-		mov	r9, [rsi + elem]
 		xor	rcx, rcx
-.loop2		mov	rax, [r8]
-		mul	qword[r9]
+
+.loop2		mov	r14, [rdi + elem]
+		mov	rax, [r14 + r11*8]
+		mov	r14, [rsi + elem]
+		mul	qword[r14 + 8 * r12]
 		add	rax, rcx
-		mov	rbx, [r10 + elem]
-		lea	rbx, [rbx + r11 * 8]
-		lea	rbx, [rbx + r12 * 8]
-		add	rax, [rbx]
+		lea	rbx, [r11 + r12]
+		mov	r14, [r10 + elem]
+		add	rax, [r14 + 8 * rbx]
 		div	r13
 		mov	rcx, rax
-		mov	[rbx], rdx
+		mov	[r14 + 8 * rbx], rdx
 		xor	rdx, rdx
 		inc	r12
-		add	r9, 8
-		cmp	r12, [rsi + vsize]
-		jl	.loop2
-		mov	rbx, [r10 + elem]
-		lea	rbx, [rbx + r11*8]
-		mov	rdx, [rsi + vsize]
-		lea	rbx, [rbx + rdx*8]
-		mov	[rbx], rcx
+		cmp	r12, r9
+		jne	.loop2
+
+		lea	rbx, [r11 + r9]
+		mov	r14, [r10 + elem]
+		mov	[r14 + 8*rbx], rcx
 		inc	r11
-		add	r8, 8
-		cmp	r11, [rdi + vsize]
-		jl	.loop1
+		cmp	r11, r8
+		jne	.loop1
+		
+
 		push	rdi
-		push	rsi
 		mov	rdi, r10		
 .clr_zeroes	call	biHead
 		cmp	rax, 0
-		jne	.to_sign
+		jne	.to_copy
 		call	biPop
-		jmp	.clr_zeroes		
-.to_sign	pop	rax
-		pop	rcx
-		mov	rax, [rax + sign]
-		xor	rax, [rcx + sign]
-		mov	[rdi + sign], rax
-		mov	rsi, rdi
-		mov	rdi, rcx
+		jmp	.clr_zeroes	
+	
+.to_copy	mov	rsi, rdi
+		pop	rdi
 		push	rsi
 		call	biCopy
 		pop	rdi

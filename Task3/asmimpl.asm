@@ -1,3 +1,5 @@
+default rel
+
 section .text
 
 	extern malloc
@@ -266,18 +268,21 @@ biFromInt:	push	rdi
 		cmp	rdi, 0
 		jge	.after_sign	
 		mov	qword[rax + sign], 1
+		neg	rdi
 .after_sign	xchg	rdi, rax
 		mov	rcx, BASE
-		xor 	rdx, rdx
+
+.loop		xor 	rdx, rdx
 		div	rcx
 		mov	rsi, rdx
 		push	rax
+		push	rcx
 		call	biPush
+		pop	rcx
 		pop	rax
 		cmp	rax, 0
-		je	.end
-		mov	rsi, rax
-		call	biPush
+		jne	.loop
+		
 .end		mov	rax, rdi
 		ret
 
@@ -812,13 +817,16 @@ biToString:	syspush
 		jle	.reverse_loop
 		xchg	rbx, rdx
 		
-.reverse_loop	mov	al, byte[r11]
+.reverse_loop	cmp	rbx, 0
+		jle	.to_end
+		mov	al, byte[r11]
 		mov	[rsi], al
 		dec	r11
 		inc	rsi
 		dec	rbx
-		jnz	.reverse_loop
-		mov	byte[rsi], 0
+		jmp	.reverse_loop
+
+.to_end		mov	byte[rsi], 0
 		pop	rdi
 		call 	alligned_free
 		pop	rsi

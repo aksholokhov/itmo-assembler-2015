@@ -795,10 +795,7 @@ biToString:	syspush
 		dec	r9
 		jmp	.zero_out
 
-.after_div	mov	byte[r11], ' '
-		inc	r11
-		inc	rbx
-		add	r10, 8
+.after_div	add	r10, 8
 		dec	rcx
 		cmp	rcx, 0
 		jg	.get_new
@@ -828,16 +825,6 @@ biToString:	syspush
 		mov	al, byte[rsi]
 		syspop	
 		ret		
-
-.maybe_mid_0	cmp	qword[rdi + vsize], 0
-		je	.div_loop
-		mov	rax, DIG_LEN
-.loop_mid_0	mov	byte[r11], '0'
-		inc	r11
-		inc	rbx
-		dec	rax
-		jnz	.loop_mid_0
-		jmp	.after_div
 
 
 		;; Returns sign of the BigInt

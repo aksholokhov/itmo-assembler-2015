@@ -4,37 +4,59 @@
 
 int main() {
 	char out[2048];
-//	char a_str[256] = "123456";
-	BigInt a = biFromString("200000002");
-	BigInt amul = biFromString("200000002");
-	BigInt c = biFromString("12434543657645745764564534");
-	BigInt cmul = biFromString("12434543657645745764564534");
-/*
+
+
+	BigInt a = biFromString("121726498776");
+	BigInt amul = biFromString("98174981264");
+	BigInt b = biFromString("7432503025832049856073465073265020432923087450234509874358763052874309852304875632");
+	BigInt bmul = biFromString("2");
+	BigInt res = biFromString("1");
+
+/*	BigInt a = biFromInt(12345;
+	BigInt b = biFromInt(1000000000);
+	
+	biSub(b, a);	
+
 	biToString(a, out, 1000000);
 	printf("%s \n", out);
 	printf("\n");
 
 
-	biToString(amul, out, 1000000);
+	biToString(b, out, 1000000);
 	printf("%s \n", out);
-	printf("\n");
+	printf("\n"); */
+	
+	int k = 1000;
+	for (int i = 0; i < k; i++) {
+		biMul(a, b);;
+	//	printf("%d, \n", i);
+		biToString(a, out, 1000000);
+		//printf("%s \n", out);
+		//printf("\n");
+	}
+
+/*	int k = 10000;
+	for (int i = 0; i < k; i++) {
+		printf("%d \n", i);
+		a = biInit(1);
+		if (i % 2 == 0) biCopy(a, amul);
+		else biCopy(a, b);
+		biDelete(a);
+//		biToString(a, out, 1000000);
+//		printf("%s \n", out);
+	}
 */
 
-	int k = 700;
-	for (int i = 0; i < k; i++) {
-		biMul(amul, a);
-		/*printf("cycle: %d \n", i);
-		biToString(amul, out, 1000000);
-		printf("%s \n", out);*/
-		printf("%d \n", i);
-	}
+/*
+	biCopy(res, amul);
+	biSub(amul, c);
+	biSub(amul, cmul);
 //	printf("after cycle");
-	
-//	biToString(amul, out, 1000000);
-//	printf("%s \n", out);
-	printf("OK \n");
-
-
+	int i = biCmp(res, amul);
+	biToString(amul, out, 1000000);
+	printf("%s \n", out);
+	printf("%d \n", i);
+*/
 
 /*	biCopy(amul, a);
 	biMul(amul, c);

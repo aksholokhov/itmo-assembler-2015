@@ -259,13 +259,26 @@ biHead		mov	r8, [rdi + elem]
 		;;	R8 - pointer to the new bInt
 		;;	R9 - initial value
 
-biFromInt:	mov	r9, rdi
+biFromInt:	push	rdi
 		mov	rdi, 1
 		call	biInit
-		mov	rdi, rax
-		mov	rsi, r9
+		pop	rdi
+		cmp	rdi, 0
+		jge	.after_sign	
+		mov	qword[rax + sign], 1
+.after_sign	xchg	rdi, rax
+		mov	rcx, BASE
+		xor 	rdx, rdx
+		div	rcx
+		mov	rsi, rdx
+		push	rax
 		call	biPush
-		mov	rax, rdi
+		pop	rax
+		cmp	rax, 0
+		je	.end
+		mov	rsi, rax
+		call	biPush
+.end		mov	rax, rdi
 		ret
 
 		;; BigInt biFromString(char const* s);
@@ -497,6 +510,16 @@ biSubMod:	syspush
 .end		syspop
 		ret
 
+		;; void biSub(BigInt a, BigInt b)
+		;; a -= b (according to the sign)
+		;; TAKES:
+		;;	RDI - BigInt a
+		;; 	RSI - BigInt b
+biSub:		xor	qword[rsi + sign], 1
+		call	biAdd
+		xor	qword[rsi + sign], 1
+		ret
+
 		;; void biAdd(BigInt a, BigInt b);
 		;; a += b (according to the sign);
 		;; TAKES:
@@ -624,6 +647,20 @@ biMulSc:	syspush
 		;; RETURNS:
 		;;	
 biMul:		syspush
+		mov	r8, 0
+		cmp	rdi, rsi
+		jne	.to_size
+		push	rdi
+		mov	rdi, 1
+		call	biInit
+		pop	rsi
+		mov	rdi, rax
+		call	biCopy	
+		xchg	rdi, rsi
+		mov	r8, 1
+		push	rsi
+
+.to_size	push	r8
 		mov	rax, [rdi + vsize]
 		add	rax, [rsi + vsize]
 		;inc	rax
@@ -696,7 +733,13 @@ biMul:		syspush
 		call	biCopy
 		pop	rdi
 		call	biDelete
-		syspop	
+		
+		pop	r8
+		cmp	r8, 1
+		jne	.to_ret
+		pop	rdi
+		call	biDelete
+.to_ret		syspop	
 		ret
 
 
@@ -714,7 +757,7 @@ biToString:	syspush
 		push	rdx
 		mov	rdi, [rdi + vsize]
 		inc	rdi
-		shl	rdi, 3
+		shl	rdi, 4
 		call	alligned_malloc
 		pop	rdx
 		pop	rsi
@@ -843,6 +886,10 @@ biCmp:		mov	r8, [rdi + sign]
 		jmp	.to_ret
 .smaller	mov	rax, -1
 .to_ret		ret
+
+
+biDivRem:	mov	rax, 0
+		ret
 
 		;; Compares two BigInts modulo two
 		;; TAKES:

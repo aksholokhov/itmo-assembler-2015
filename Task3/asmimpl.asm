@@ -20,6 +20,7 @@ section .text
 	global biMul
 	global biMulSc
 	global biCmp
+	global biCopy
 
 TEN 	equ	10		;; It's ten, suddenly. 
 BASE	equ 	100000000 	;; Base of the scale of notation
@@ -116,7 +117,11 @@ biInit:		syspush
 		call	alligned_malloc
 		pop	r9
 		mov	[r9 + elem], rax
-		;;TODO zero to limit
+		mov	r8, [r9 + limit]
+.loop2		mov	qword[rax], 0
+		add	rax, 8
+		dec	r8
+		jnz	.loop2
 		mov	rax, r9	
 		pop	rdx
 		pop	rsi
@@ -329,8 +334,7 @@ biFromString:	syspush
 		
 .clr_zeroes	call 	biHead
 		cmp	rax, 0
-		jl	.to_zero_sign
-		jg	.to_zero_sign
+		jne	.to_zero_sign
 		call	biPop
 		jmp	.clr_zeroes	
 		
@@ -545,6 +549,7 @@ biAdd:		mov	rax, [rdi + sign]
 biCopy		push	rdi
 		push	rsi
 		mov	rdi, [rsi + limit]
+		shl	rdi, 3
 		call	alligned_malloc
 		pop	rsi
 		pop	rdi
@@ -612,6 +617,87 @@ biMulSc:	syspush
 .to_end		syspop
 		ret
 
+		;; void BiMul(BigInt a, BigInt b);
+		;; TAKES:
+		;;	RDI - BigInt a
+		;;	RSI - BigInt b
+		;; RETURNS:
+		;;	
+biMul:		syspush
+		mov	rax, [rdi + vsize]
+		add	rax, [rsi + vsize]
+		push	rax
+		xor	rcx, rcx
+.lencount	inc	rcx
+		shr	rax, 1
+		jnz	.lencount
+		inc	rcx
+		
+		push	rsi
+		push	rdi
+		mov	rdi, rcx
+		call	biInit
+		pop	rdi
+		pop	rsi
+		mov	r10, rax		
+		pop	rax
+		mov	[r10 + vsize], rax		
+
+		xor 	rax, rax
+		xor	rdx, rdx
+		mov	r8, [rdi + elem]
+		mov	r13, BASE
+		mov	r11, 0	
+.loop1		mov	r12, 0
+		mov	r9, [rsi + elem]
+		xor	rcx, rcx
+.loop2		mov	rax, [r8]
+		mul	qword[r9]
+		add	rax, rcx
+		mov	rbx, [r10 + elem]
+		lea	rbx, [rbx + r11 * 8]
+		lea	rbx, [rbx + r12 * 8]
+		add	rax, [rbx]
+		div	r13
+		mov	rcx, rax
+		mov	[rbx], rdx
+		xor	rdx, rdx
+		inc	r12
+		add	r9, 8
+		cmp	r12, [rsi + vsize]
+		jl	.loop2
+		mov	rbx, [r10 + elem]
+		lea	rbx, [rbx + r11*8]
+		mov	rdx, [rsi + vsize]
+		lea	rbx, [rbx + rdx*8]
+		mov	[rbx], rcx
+		inc	r11
+		add	r8, 8
+		cmp	r11, [rdi + vsize]
+		jl	.loop1
+		push	rdi
+		push	rsi
+		mov	rdi, r10		
+.clr_zeroes	call	biHead
+		cmp	rax, 0
+		jne	.to_sign
+		call	biPop
+		jmp	.clr_zeroes		
+.to_sign	pop	rax
+		pop	rcx
+		mov	rax, [rax + sign]
+		xor	rax, [rcx + sign]
+		mov	[rdi + sign], rax
+		mov	rsi, rdi
+		mov	rdi, rcx
+		push	rsi
+		call	biCopy
+		pop	rdi
+		call	biDelete
+		syspop	
+		ret
+
+
 		;; void biToStringAsIs(BigInt src, char* buf)
 		;; Outs bInt inner vector "as is". I used it for debugging
 		;; TAKES:
@@ -627,7 +713,7 @@ biToString:	syspush
 		mov	rdi, [rdi + vsize]
 		inc	rdi
 		shl	rdi, 3
-		call	malloc
+		call	alligned_malloc
 		pop	rdx
 		pop	rsi
 		pop	rdi

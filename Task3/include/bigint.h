@@ -11,9 +11,9 @@ extern "C" {
 
 
 BigInt bInit(int64_t);
-void bPush(BigInt *a, int64_t v);
-void bPop(BigInt *a, int64_t v);
-
+void biPush(BigInt *a, int64_t v);
+void biPop(BigInt *a, int64_t v);
+void biCopy(BigInt a, BigInt b);
 /** Create a BigInt from 64-bit signed integer.
  */
 BigInt biFromInt(int64_t x);

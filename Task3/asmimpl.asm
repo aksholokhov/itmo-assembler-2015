@@ -499,9 +499,15 @@ biSubMod:	syspush
 		;; TAKES:
 		;;	RDI - BigInt a
 		;; 	RSI - BigInt b
-biSub:		xor	qword[rsi + sign], 1
+biSub:		mov	rax, [rsi + sign]
+		xor	rax, 1
+		mov	[rsi + sign], rax
+		push	rsi
 		call	biAdd
-		xor	qword[rsi + sign], 1
+		pop	rsi
+		mov	rax, [rsi + sign]
+		xor	rax, 1
+		mov	[rsi + sign], rax
 		ret
 
 		;; void biAdd(BigInt a, BigInt b);
@@ -509,17 +515,25 @@ biSub:		xor	qword[rsi + sign], 1
 		;; TAKES:
 		;;	RDI - BigInt a
 		;;	RSI - BigInt b
-biAdd:		mov	rax, [rdi + sign]
+biAdd:		cmp	qword[rsi + vsize], 0		;; Если b == 0, то ответ - a
+		je	.to_ret
+		cmp	qword[rdi + vsize], 0		;; Если a == 0, то скопируем b в а
+		jne	.not_zeroes
+		call	biCopy
+		jmp	.to_ret
+
+.not_zeroes	mov	rax, [rdi + sign]
 		cmp	rax, qword[rsi + sign] 	;; если числа разного знака - отнимем одно от другого.
 		jne 	.sub
 		push 	rax
 		call	biAddMod		;; иначе - сложим
 		pop	rax
 		mov	[rdi + sign], rax
-		ret
+.to_ret		ret
 .sub		call	biCmpMod		;; Если a больше по модулю чем b - отнимаем как есть
 		cmp	rax, 0
 		jl	.sub_rev		;; Иначе - меняем местами
+		je	.is_zero
 		call 	biSubMod
 		ret
 
@@ -531,7 +545,12 @@ biAdd:		mov	rax, [rdi + sign]
 		mov	rdi, rax
 		call	biCopy
 		pop	rsi
-		call	biSubMod		
+		call	biSubMod
+	
+		;xchg	rsi, rdi
+		;call	biCopy
+		;mov	rdi, rsi
+		;call	biDelete	
 		mov	rcx, [rsi + elem]
 		mov	rax, [rdi + elem]
 		mov	[rsi + elem], rax
@@ -541,10 +560,19 @@ biAdd:		mov	rax, [rdi + sign]
 		mov	[rsi + vsize], rax
 		mov	rax, [rdi + sign]
 		mov	[rsi + sign], rax
-		mov	rdi, rcx
+		push 	rcx
 		call	alligned_free		;; удаляем раннее нами созданный вспомогательный BigInt
+		pop	rdi
+		call	alligned_free
 		ret
 
+.is_zero	push	rdi
+		mov	rdi, 1
+		call	biInit
+		pop	rdi
+		mov	rsi, rax
+		call	biCopy
+		ret
 		;; void biCopy(BigInt dst, BigInt src)
 		;; Копирует src в dst
 		;; TAKES:
@@ -575,13 +603,15 @@ biCopy		push	rdi
 		mov	r8, rdx
 		mov	r9, [rsi + elem]
 		mov	rcx, [rsi + vsize]
-.loop		mov	rax, [r9]			;; копируем содержимое вектора src в новосозданный вектор
+.loop		cmp	rcx, 0
+		jle	.to_ret
+		mov	rax, [r9]			;; копируем содержимое вектора src в новосозданный вектор
 		mov	[r8], rax
 		add	r9, 8
 		add	r8, 8
 		dec	rcx
-		jnz	.loop
-		mov	[rdi + elem], rdx		;; помещаем новый вектор как внутренний вектор dst
+		jmp	.loop
+.to_ret		mov	[rdi + elem], rdx		;; помещаем новый вектор как внутренний вектор dst
 		ret
 		
 
